@@ -3,6 +3,8 @@
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
+
+## [1.1.0] - 2025-09-19
 - Harden Amazon scraper and unsupported page notice
 - Task-level progress and status UI
 - Platform-aware gap logic; unit tests
