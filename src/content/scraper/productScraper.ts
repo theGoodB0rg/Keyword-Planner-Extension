@@ -23,18 +23,18 @@ function pickFirst(selectors: string[]): string | null {
 
 function extractPriceRaw(): { raw: string | null; value: number | null; currency: string | null } {
   const priceSelectors = [
-    '#priceblock_ourprice', '#priceblock_dealprice', 'span.a-offscreen',
+    '#priceblock_ourprice', '#priceblock_dealprice', '#corePrice_feature_div .a-offscreen', '.a-price .a-offscreen', 'span.a-offscreen',
     '.price-item--regular', '.product-price span', 'p.price', 'span.woocommerce-Price-amount'
   ];
   for (const sel of priceSelectors) {
     const el = document.querySelector(sel);
     if (el) {
       const raw = text(el);
-      const match = raw.match(/([£$€¥])\s?([0-9,.]+)/);
+      const match = raw.match(/([£$€¥]|USD|EUR|GBP)\s?([0-9,.]+)/i);
       let currency: string | null = null;
       let value: number | null = null;
       if (match) {
-        currency = match[1];
+        currency = match[1].toUpperCase();
         value = parseFloat(match[2].replace(/,/g, ''));
       }
       return { raw, value, currency };
@@ -45,7 +45,8 @@ function extractPriceRaw(): { raw: string | null; value: number | null; currency
 
 function extractBullets(): string[] {
   const bulletRoots = [
-    '#feature-bullets ul', '.product-features ul', '.product-highlights ul', '.woocommerce-product-details__short-description ul'
+    '#feature-bullets ul', '#featurebullets_feature_div ul', '#detailBullets_feature_div ul',
+    '.product-features ul', '.product-highlights ul', '.woocommerce-product-details__short-description ul'
   ];
   for (const rootSel of bulletRoots) {
     const root = document.querySelector(rootSel);
@@ -126,7 +127,7 @@ function extractSpecs(): { key: string; value: string }[] {
 }
 
 export function scrapeProduct(): ProductData | null {
-  const title = pickFirst(['#productTitle', 'h1.product-single__title', 'h1.product__title', '.product_title', 'h1']);
+  const title = pickFirst(['#productTitle', '#titleSection h1', "meta[name='title']", 'h1.product-single__title', 'h1.product__title', '.product_title', 'h1']);
   if (!title) return null; // Not a recognizable product page
   const platform = detectPlatform();
   const price = extractPriceRaw();

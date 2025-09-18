@@ -34,6 +34,26 @@ function initialize() {
       
       // Set up the UI button
       setupUI();
+    } else {
+      // Notify extension UI that this page is unsupported
+      chrome.runtime.sendMessage({ action: 'pageUnsupported', url: window.location.href });
+      // Optional in-page banner
+      try {
+        const banner = document.createElement('div');
+        banner.style.position = 'fixed';
+        banner.style.bottom = '16px';
+        banner.style.left = '16px';
+        banner.style.zIndex = '9999';
+        banner.style.background = '#fff3cd';
+        banner.style.color = '#664d03';
+        banner.style.border = '1px solid #ffecb5';
+        banner.style.padding = '8px 12px';
+        banner.style.borderRadius = '4px';
+        banner.style.boxShadow = '0 2px 6px rgba(0,0,0,.1)';
+        banner.textContent = 'This page is not supported for analysis.';
+        document.body.appendChild(banner);
+        setTimeout(() => banner.remove(), 5000);
+      } catch {}
     }
   } catch (error) {
     console.error('AI Keyword Planner: Error in content script', error);

@@ -22,7 +22,11 @@ const API_CONFIG = {
     FALLBACKS: [
       'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent', // Google Gemini (Updated Model)
       'https://api.deepseek.com/v1/completions' // Another example (replace placeholder key if used)
-    ]
+    ],
+    PROXY: {
+      ENABLED: false,
+      URL: 'https://your-secure-proxy.example.com/ai' // See PROVIDER_CONFIG.md
+    }
   }
 };
 
@@ -163,6 +167,26 @@ export async function analyzePageContent(pageContent: string): Promise<KeywordDa
  * Attempt AI service call with multiple fallback options.
  */
 export async function getAIAnalysis(prompt: string): Promise<string> {
+  // If proxy is enabled, try it first
+  if (API_CONFIG.AI.PROXY.ENABLED) {
+    try {
+      const resp = await fetch(API_CONFIG.AI.PROXY.URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: 'gpt-3.5-turbo', messages: [{ role: 'user', content: prompt }], max_tokens: 800 })
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        const content = data?.content || '';
+        if (content) return content;
+        console.warn('Proxy returned OK but no content.');
+      } else {
+        console.warn('Proxy call failed:', await resp.text());
+      }
+    } catch (e) {
+      console.warn('Proxy call threw:', (e as Error).message);
+    }
+  }
   // Define services to try, including the updated Gemini model
   const servicesToTry = [
     { name: 'Primary AI (OpenAI/similar)', url: API_CONFIG.AI.PRIMARY, key: 'YOUR_OPENAI_API_KEY_PLACEHOLDER', type: 'openai' },

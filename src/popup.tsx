@@ -4,6 +4,10 @@ import ReactDOM from 'react-dom';
 import styled from 'styled-components';
 
 import Header from './components/Header';
+// Try importing version from package.json (tsconfig has resolveJsonModule)
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
+import pkg from '../package.json';
 import KeywordTable from './components/KeywordTable';
 import { KeywordData } from './utils/types';
 import { isOfflineMode, toggleOfflineMode, loadKeywords as loadKeywordsFromStorage } from './utils/storage';
@@ -63,6 +67,14 @@ const Footer = styled.footer`
   font-size: 0.75rem;
   color: #6c757d;
   text-align: center;
+`;
+const Notice = styled.div`
+  background: #fff3cd;
+  border: 1px solid #ffecb5;
+  color: #664d03;
+  padding: 8px 12px;
+  border-radius: 4px;
+  margin-bottom: 8px;
 `;
 
 // New styled button for Copy, different color
@@ -263,6 +275,7 @@ const App: React.FC = () => {
   const [historyLoading, setHistoryLoading] = useState<boolean>(false);
   const [showHistory, setShowHistory] = useState<boolean>(false);
   const [selectedHistoryIndex, setSelectedHistoryIndex] = useState<number | null>(null);
+  const [unsupportedPage, setUnsupportedPage] = useState<string | null>(null);
   const [taskStatus, setTaskStatus] = useState<Record<AiTaskType, {state: 'pending' | 'running' | 'done' | 'error'; elapsedMs?: number; heuristic?: boolean}>>({
     'generate.longTail': { state: 'pending' },
     'generate.meta': { state: 'pending' },
@@ -284,6 +297,11 @@ const App: React.FC = () => {
         if (message.keywords && message.keywords.length === 0 && !isAnalyzing) { // Only show if not in midst of analysis
             setError("Analysis complete, but no keywords were found for this page.");
         }
+        setKeywordsLoading(false);
+        setIsAnalyzing(false);
+      }
+      if (message.action === 'pageUnsupported') {
+        setUnsupportedPage(message.url || '');
         setKeywordsLoading(false);
         setIsAnalyzing(false);
       }
@@ -576,6 +594,11 @@ const App: React.FC = () => {
         onToggleOfflineMode={handleToggleOfflineMode} 
       />
       <Content>
+        {unsupportedPage && (
+          <Notice>
+            This page type isn’t supported for analysis yet.
+          </Notice>
+        )}
         <ButtonContainer>
           <ActionButton onClick={handleAnalyzeCurrentPage} disabled={isAnalyzing || keywordsLoading}>
             {isAnalyzing ? 'Analyzing...' : (keywordsLoading && !isAnalyzing ? 'Loading...' : 'Analyze Page')}
@@ -736,7 +759,7 @@ const App: React.FC = () => {
         )}
       </Content>
       <Footer>
-        Product Listing Optimizer {offlineMode ? '(Offline Mode)' : '(Online Mode)'} v1.0.0
+        Product Listing Optimizer {offlineMode ? '(Offline Mode)' : '(Online Mode)'} v{(pkg?.version as string) || '1.0.0'}
       </Footer>
     </Container>
   );
