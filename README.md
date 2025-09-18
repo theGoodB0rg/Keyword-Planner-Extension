@@ -1,5 +1,7 @@
 # Product Listing Optimizer (Pivoted from AI Keyword Planner)
 
+[![Build Status](https://github.com/theGoodB0rg/Keyword-Planner-Extension/actions/workflows/build.yml/badge.svg)](https://github.com/theGoodB0rg/Keyword-Planner-Extension/actions/workflows/build.yml)
+
 An AI-assisted Chrome Extension that analyzes live e‑commerce product pages (Amazon, Shopify, WooCommerce & generic storefronts) and generates:
 - Attribute gap insights (what’s missing vs expected)
 - Long‑tail & variant keyword modifiers
