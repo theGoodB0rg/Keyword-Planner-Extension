@@ -1,7 +1,7 @@
 // src/background.ts
 
 import { analyzePageContent, getAIAnalysis } from './utils/api';
-import { loadKeywords, saveKeywords, isOfflineMode, toggleOfflineMode, STORAGE_KEYS, saveProductOptimization, loadProductOptimization, appendProductOptimizationHistory } from './utils/storage';
+import { loadKeywords, saveKeywords, isOfflineMode, toggleOfflineMode, STORAGE_KEYS, saveProductOptimization, loadProductOptimization, appendProductOptimizationHistory, loadProductOptimizationHistory } from './utils/storage';
 import { PageMetadata, KeywordData } from './utils/types';
 import { optimizeProduct } from './background/aiOrchestrator';
 import { ProductData, ProductOptimizationResult } from './types/product';
@@ -95,6 +95,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           sendResponse({ success: true, optimization: latestProductOptimization });
         } catch (e:any) {
           sendResponse({ success: false, error: e?.message || 'Refresh failed.' });
+        }
+      })();
+      return true;
+    case 'getProductOptimizationHistory':
+      (async () => {
+        try {
+          const history = await loadProductOptimizationHistory();
+          sendResponse({ success: true, history });
+        } catch (e:any) {
+          sendResponse({ success: false, error: e?.message || 'Failed to load history', history: [] });
         }
       })();
       return true;

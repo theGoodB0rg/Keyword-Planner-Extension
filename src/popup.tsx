@@ -197,6 +197,39 @@ const NoMarginP = styled.p`
   margin: 0;
 `;
 
+// History Viewer Styles
+const HistoryList = styled.ul`
+  list-style: none;
+  padding-left: 0;
+  margin: 0.25rem 0 0;
+`;
+const HistoryListItem = styled.li`
+  margin-bottom: 6px;
+`;
+const HistoryRow = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+`;
+const HistoryToggleButton = styled.button`
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+  flex: 1;
+  font-size: 0.7rem;
+  &:hover { text-decoration: underline; }
+`;
+const SnapshotDetail = styled.div`
+  margin-top: 4px;
+  font-size: 0.65rem;
+  background: #fff;
+  border: 1px solid #eee;
+  padding: 6px;
+  border-radius: 3px;
+`;
+
 const KeywordChip = styled.span`
   display: inline-block;
   background-color: #e9ecef;
@@ -225,6 +258,10 @@ const App: React.FC = () => {
   const [optimizationLoading, setOptimizationLoading] = useState<boolean>(false);
   const [optimizationError, setOptimizationError] = useState<string | null>(null);
   const [exportStatus, setExportStatus] = useState<string | null>(null);
+  const [history, setHistory] = useState<ProductOptimizationResult[]>([]);
+  const [historyLoading, setHistoryLoading] = useState<boolean>(false);
+  const [showHistory, setShowHistory] = useState<boolean>(false);
+  const [selectedHistoryIndex, setSelectedHistoryIndex] = useState<number | null>(null);
 
   useEffect(() => {
     loadInitialData();
@@ -248,6 +285,10 @@ const App: React.FC = () => {
         setOptimization(message.optimization || null);
         setOptimizationLoading(false);
         setOptimizationError(null);
+        // Prepend into history view (avoid duplication by timestamp)
+        if (message.optimization && !history.find(h => h.timestamp === message.optimization.timestamp)) {
+          setHistory(prev => [message.optimization, ...prev].slice(0, 10));
+        }
       }
     };
 
@@ -269,6 +310,14 @@ const App: React.FC = () => {
           setOptimization(resp.optimization || null);
         }
         setOptimizationLoading(false);
+      });
+      // Load optimization history
+      setHistoryLoading(true);
+      chrome.runtime.sendMessage({ action: 'getProductOptimizationHistory' }, (resp) => {
+        if (resp?.success) {
+          setHistory(resp.history || []);
+        }
+        setHistoryLoading(false);
       });
     } catch (err) {
       setError('Failed to initialize.'); setKeywordsLoading(false); setOptimizationLoading(false);
@@ -430,6 +479,21 @@ const App: React.FC = () => {
     }
   };
 
+  const toggleHistory = () => {
+    setShowHistory(prev => !prev);
+  };
+
+  const viewSnapshot = (idx: number) => {
+    setSelectedHistoryIndex(idx === selectedHistoryIndex ? null : idx);
+  };
+
+  const applySnapshot = (idx: number) => {
+    const snap = history[idx];
+    if (snap) {
+      setOptimization(snap);
+    }
+  };
+
   // Get keyword recommendations based on the current keywords
   const getKeywordRecommendations = () => {
     if (!keywords || keywords.length === 0) return [];
@@ -502,6 +566,10 @@ const App: React.FC = () => {
             </SuccessButton>
           )}
         </ButtonContainer>
+        <InlineActions style={{marginBottom: '0.5rem'}}>
+          <TinyButton onClick={toggleHistory} disabled={historyLoading}>{showHistory ? 'Hide History' : 'Show History'}{historyLoading ? '…' : ''}</TinyButton>
+          {showHistory && history.length > 0 && <TinyButton disabled>{history.length} snapshots</TinyButton>}
+        </InlineActions>
         <KeywordTable keywords={keywords} loading={keywordsLoading} error={error} />
         {!optimization && optimizationLoading && (
           <OptimizationPanel>
@@ -564,6 +632,42 @@ const App: React.FC = () => {
               <TinyButton onClick={() => { navigator.clipboard.writeText(JSON.stringify(optimization, null, 2)); setExportStatus('Copied'); setTimeout(()=> setExportStatus(null), 1500); }} disabled={optimizationLoading}>Copy JSON</TinyButton>
             </InlineActions>
             <SmallMeta>Cached at {new Date(optimization.timestamp).toLocaleTimeString()}</SmallMeta>
+          </OptimizationPanel>
+        )}
+        {showHistory && (
+          <OptimizationPanel>
+            <PanelHeading>Optimization History {historyLoading && <Badge>Loading</Badge>}</PanelHeading>
+            {(!history || history.length === 0) && !historyLoading && <Muted>No snapshots captured yet.</Muted>}
+            {history && history.length > 0 && (
+              <HistoryList>
+                {history.map((h, idx) => (
+                  <HistoryListItem key={h.timestamp}>
+                    <HistoryRow>
+                      <HistoryToggleButton onClick={() => viewSnapshot(idx)}>
+                        <strong>{new Date(h.timestamp).toLocaleTimeString()}</strong> {h.product?.title ? '– ' + (h.product.title.length > 40 ? h.product.title.slice(0,40)+'…' : h.product.title) : ''}
+                      </HistoryToggleButton>
+                      <TinyButton onClick={() => applySnapshot(idx)}>Use</TinyButton>
+                    </HistoryRow>
+                    {selectedHistoryIndex === idx && (
+                      <SnapshotDetail>
+                        {h.longTail && h.longTail.length > 0 && (
+                          <div><strong>LongTail:</strong> {h.longTail.slice(0,3).map(l => l.phrase).join(', ')}</div>
+                        )}
+                        {h.meta && (
+                          <div><strong>Meta:</strong> {h.meta.metaTitle.slice(0,60)}…</div>
+                        )}
+                        {h.rewrittenBullets && h.rewrittenBullets.length > 0 && (
+                          <div><strong>Bullets:</strong> {h.rewrittenBullets.slice(0,2).map(b=> b.rewritten.slice(0,40)+'…').join(' | ')}</div>
+                        )}
+                        {h.gaps && h.gaps.gaps && (
+                          <div><strong>Gaps:</strong> {h.gaps.gaps.slice(0,2).map(g=> g.key).join(', ')}</div>
+                        )}
+                      </SnapshotDetail>
+                    )}
+                  </HistoryListItem>
+                ))}
+              </HistoryList>
+            )}
           </OptimizationPanel>
         )}
         
