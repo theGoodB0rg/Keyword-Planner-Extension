@@ -51,8 +51,8 @@ Planned (Roadmap):
 1. Clone the repository
 
 ```
-git clone https://github.com/yourusername/ai-keyword-planner.git
-cd ai-keyword-planner
+git clone https://github.com/theGoodB0rg/Keyword-Planner-Extension.git
+cd Keyword-Planner-Extension
 ```
 
 2. Install dependencies
