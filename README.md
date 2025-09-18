@@ -115,6 +115,15 @@ Planned:
  8. Task-level streaming progress (per sub-task)
  9. Persistent optimization history timeline
 
+## Privacy & Data Handling
+
+See `PRIVACY.md` for details.
+
+- Only analyzes the active page when invoked
+- Stores results locally (chrome.storage.local)
+- Offline heuristics avoid network calls
+- For online AI usage, configure a secure proxy for provider keys; keys are never shipped in the extension
+
 ## Contributing & Roadmap
 
 Roadmap highlights (see `ROADMAP.md` soon):

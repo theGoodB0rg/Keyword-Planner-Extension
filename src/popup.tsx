@@ -8,6 +8,7 @@ import KeywordTable from './components/KeywordTable';
 import { KeywordData } from './utils/types';
 import { isOfflineMode, toggleOfflineMode, loadKeywords as loadKeywordsFromStorage } from './utils/storage';
 import { ProductOptimizationResult, LongTailSuggestion, MetaSuggestion, RewrittenBullet, GapResult } from './types/product';
+import { AiTaskType } from './types/product';
 
 const Container = styled.div`
   font-family: Arial, sans-serif;
@@ -262,6 +263,12 @@ const App: React.FC = () => {
   const [historyLoading, setHistoryLoading] = useState<boolean>(false);
   const [showHistory, setShowHistory] = useState<boolean>(false);
   const [selectedHistoryIndex, setSelectedHistoryIndex] = useState<number | null>(null);
+  const [taskStatus, setTaskStatus] = useState<Record<AiTaskType, {state: 'pending' | 'running' | 'done' | 'error'; elapsedMs?: number; heuristic?: boolean}>>({
+    'generate.longTail': { state: 'pending' },
+    'generate.meta': { state: 'pending' },
+    'rewrite.bullets': { state: 'pending' },
+    'detect.gaps': { state: 'pending' }
+  });
 
   useEffect(() => {
     loadInitialData();
@@ -289,6 +296,23 @@ const App: React.FC = () => {
         if (message.optimization && !history.find(h => h.timestamp === message.optimization.timestamp)) {
           setHistory(prev => [message.optimization, ...prev].slice(0, 10));
         }
+        // Mark all tasks done once final optimization arrives (if not already)
+        setTaskStatus(prev => {
+          const next = { ...prev } as any;
+          (Object.keys(next) as AiTaskType[]).forEach(k => { if (next[k].state !== 'error') next[k].state = 'done'; });
+          return next;
+        });
+      }
+      if (message.action === 'optimizationProgress' && message.event) {
+        const e = message.event as { task: AiTaskType; status: 'start'|'done'|'error'; elapsedMs?: number; fallbackUsed?: boolean };
+        setTaskStatus(prev => ({
+          ...prev,
+          [e.task]: {
+            state: e.status === 'start' ? 'running' : e.status === 'done' ? 'done' : 'error',
+            elapsedMs: e.elapsedMs,
+            heuristic: e.fallbackUsed === true
+          }
+        }));
       }
     };
 
@@ -341,6 +365,8 @@ const App: React.FC = () => {
 
   const handleAnalyzeCurrentPage = () => {
   setIsAnalyzing(true); setKeywordsLoading(true); setOptimizationLoading(true); setError(null); setOptimizationError(null);
+    // reset task statuses
+    setTaskStatus({ 'generate.longTail': { state: 'pending' }, 'generate.meta': { state: 'pending' }, 'rewrite.bullets': { state: 'pending' }, 'detect.gaps': { state: 'pending' } });
     try {
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         if (chrome.runtime.lastError) {
@@ -590,6 +616,20 @@ const App: React.FC = () => {
               {offlineMode && <Badge>Heuristic</Badge>}
               {!offlineMode && optimizationLoading && <Badge>Updating</Badge>}
             </PanelHeading>
+            <OptSection>
+              <strong>Tasks:</strong>
+              <OptList>
+                {(['generate.longTail','generate.meta','rewrite.bullets','detect.gaps'] as AiTaskType[]).map((t) => (
+                  <OptItem key={t}>
+                    {t}
+                    {' '}
+                    <Badge>{taskStatus[t]?.state || 'pending'}</Badge>
+                    {taskStatus[t]?.elapsedMs != null && <Muted> ({Math.round(taskStatus[t]!.elapsedMs!)}ms)</Muted>}
+                    {taskStatus[t]?.heuristic && <Badge>Fallback</Badge>}
+                  </OptItem>
+                ))}
+              </OptList>
+            </OptSection>
             <OptSection>
               <strong>Long-Tail Suggestions:</strong>
               <OptList>

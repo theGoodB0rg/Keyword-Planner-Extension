@@ -30,15 +30,32 @@ function heuristicBullets(product: ProductData): RewrittenBullet[] {
   });
 }
 
+export function getExpectedAttributes(platform: ProductData['detectedPlatform']): string[] {
+  const base = ['material', 'dimensions', 'weight', 'color', 'size', 'brand'];
+  const perPlatform: Record<ProductData['detectedPlatform'], string[]> = {
+    amazon: [...base, 'asin', 'country of origin', 'item model number'],
+    shopify: [...base, 'sku'],
+    woocommerce: [...base, 'sku'],
+    generic: base,
+  };
+  return perPlatform[platform] || base;
+}
+
+export function classifyGapScore(gapScore: number): GapResult['classification'] {
+  if (gapScore > 8) return 'severe';
+  if (gapScore > 4) return 'moderate';
+  if (gapScore > 0) return 'mild';
+  return 'none';
+}
+
 function heuristicGaps(product: ProductData): GapResult {
-  const expected = ['material', 'dimensions', 'weight', 'color', 'size', 'brand'];
+  const expected = getExpectedAttributes(product.detectedPlatform);
   const presentKeys = new Set(product.specs.map(s => s.key));
   const gaps = expected
     .filter(k => !presentKeys.has(k))
     .map(k => ({ key: k, severity: 'medium' as const, suggestion: `Add ${k} for completeness` }));
   const gapScore = gaps.length * 2;
-  let classification: GapResult['classification'] = 'none';
-  if (gapScore > 8) classification = 'severe'; else if (gapScore > 4) classification = 'moderate'; else if (gapScore > 0) classification = 'mild';
+  const classification = classifyGapScore(gapScore);
   return { gaps, gapScore, classification };
 }
 
@@ -139,5 +156,37 @@ export async function optimizeProduct(product: ProductData, offline = false) {
     { task: 'detect.gaps', input: { specs: product.specs }, offline }
   ];
   const results = await Promise.all(tasks.map(t => runTask(t, product)));
+  return results;
+}
+
+export type OptimizationProgressEvent = {
+  task: AiTaskType;
+  status: 'start' | 'done' | 'error';
+  elapsedMs?: number;
+  fallbackUsed?: boolean;
+};
+
+export async function optimizeProductWithProgress(
+  product: ProductData,
+  offline = false,
+  onProgress?: (e: OptimizationProgressEvent) => void
+) {
+  const tasks: AiTaskRequest[] = [
+    { task: 'generate.longTail', input: { title: product.title }, offline },
+    { task: 'generate.meta', input: { title: product.title }, offline },
+    { task: 'rewrite.bullets', input: { bullets: product.bullets.slice(0,5) }, offline },
+    { task: 'detect.gaps', input: { specs: product.specs }, offline }
+  ];
+  const results: AiTaskResponse[] = [];
+  for (const t of tasks) {
+    onProgress?.({ task: t.task, status: 'start' });
+    try {
+      const r = await runTask(t, product);
+      results.push(r);
+      onProgress?.({ task: t.task, status: 'done', elapsedMs: r.elapsedMs, fallbackUsed: r.fallbackUsed });
+    } catch {
+      onProgress?.({ task: t.task, status: 'error' });
+    }
+  }
   return results;
 }

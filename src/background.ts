@@ -3,7 +3,7 @@
 import { analyzePageContent, getAIAnalysis } from './utils/api';
 import { loadKeywords, saveKeywords, isOfflineMode, toggleOfflineMode, STORAGE_KEYS, saveProductOptimization, loadProductOptimization, appendProductOptimizationHistory, loadProductOptimizationHistory } from './utils/storage';
 import { PageMetadata, KeywordData } from './utils/types';
-import { optimizeProduct } from './background/aiOrchestrator';
+import { optimizeProduct, optimizeProductWithProgress } from './background/aiOrchestrator';
 import { ProductData, ProductOptimizationResult } from './types/product';
 
 // Holds the most recent product optimization result so popup or other parts can request it later.
@@ -87,7 +87,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
         const offline = await isOfflineMode();
         try {
-          const results = await optimizeProduct(lastProductData, offline);
+          const results = await optimizeProductWithProgress(lastProductData, offline, (e) => {
+            chrome.runtime.sendMessage({ action: 'optimizationProgress', event: e });
+          });
           latestProductOptimization = buildOptimizationResult(lastProductData, results);
           saveProductOptimization(latestProductOptimization).catch(()=>{});
           appendProductOptimizationHistory(latestProductOptimization).catch(()=>{});
@@ -172,7 +174,9 @@ async function handlePageAnalysis(pageData: PageMetadata, sendResponseToContentS
     if (productData) {
       lastProductData = productData; // remember for refresh
       try {
-        const results = await optimizeProduct(productData, offline);
+        const results = await optimizeProductWithProgress(productData, offline, (e) => {
+          chrome.runtime.sendMessage({ action: 'optimizationProgress', event: e });
+        });
         productOptimization = buildOptimizationResult(productData, results);
   latestProductOptimization = productOptimization; // cache globally
   // Persist for later sessions (fire and forget)
