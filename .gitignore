@@ -40,6 +40,7 @@ errors.txt
 
 # Icon generation temp
 temp-icons/
+extension_creation_plan.md
 
 # TypeScript
 *.tsbuildinfo
