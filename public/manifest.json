@@ -53,14 +53,15 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["icons/*"],
+      "resources": [
+        "assets/dist/icons/*",
+        "icons/*"
+      ],
       "matches": [
         "https://www.amazon.com/*",
         "https://www.amazon.co.uk/*",
         "https://www.amazon.ca/*",
-        "https://*.myshopify.com/*",
-        "https://*/products/*",
-        "https://*/product/*"
+        "https://*.myshopify.com/*"
       ]
     }
   ]
