@@ -13,6 +13,7 @@ import { KeywordData } from './utils/types';
 import { isOfflineMode, toggleOfflineMode, loadKeywords as loadKeywordsFromStorage } from './utils/storage';
 import { ProductOptimizationResult, LongTailSuggestion, MetaSuggestion, RewrittenBullet, GapResult } from './types/product';
 import { AiTaskType } from './types/product';
+// Licensing UI (status + simple activation)
 
 const Container = styled.div`
   font-family: Arial, sans-serif;
@@ -209,6 +210,18 @@ const TipContainer = styled.div`
 const NoMarginP = styled.p`
   margin: 0;
 `;
+const ActivationBar = styled.div`
+  padding: 10px;
+  border-top: 1px solid #eee;
+`;
+const ActivationRow = styled.div`
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+`;
+const TokenInput = styled.input`
+  flex: 1;
+`;
 
 // History Viewer Styles
 const HistoryList = styled.ul`
@@ -282,6 +295,9 @@ const App: React.FC = () => {
     'rewrite.bullets': { state: 'pending' },
     'detect.gaps': { state: 'pending' }
   });
+  const [licenseStatus, setLicenseStatus] = useState<{plan: string; remaining: number; daily: number} | null>(null);
+  const [activationOpen, setActivationOpen] = useState<boolean>(false);
+  const [activationToken, setActivationToken] = useState<string>('');
 
   useEffect(() => {
     loadInitialData();
@@ -345,6 +361,12 @@ const App: React.FC = () => {
     try {
       const isOffline = await isOfflineMode();
       setOfflineMode(isOffline);
+      chrome.runtime.sendMessage({ action: 'getLicenseStatus' }, (resp) => {
+        if (resp?.success && resp.status) {
+          const { info, remaining } = resp.status as any;
+          setLicenseStatus({ plan: info.plan, remaining, daily: info.dailyAllowance });
+        }
+      });
       await loadKeywords(false); // Initial load might not need its own loading indicator if page load is quick
       // Fetch existing optimization if any
       chrome.runtime.sendMessage({ action: 'getProductOptimization' }, (resp) => {
@@ -614,7 +636,15 @@ const App: React.FC = () => {
               {showRecommendations ? 'Hide Recommendations' : 'Get Recommendations'}
             </SuccessButton>
           )}
+          <TinyButton onClick={() => setActivationOpen(true)} disabled={isAnalyzing}>
+            {licenseStatus ? `Plan: ${licenseStatus.plan}` : 'Activate Pro'}
+          </TinyButton>
         </ButtonContainer>
+        {licenseStatus && (
+          <Notice>
+            Daily allowance: {licenseStatus.daily} • Remaining today: {licenseStatus.remaining}
+          </Notice>
+        )}
         <InlineActions style={{marginBottom: '0.5rem'}}>
           <TinyButton onClick={toggleHistory} disabled={historyLoading}>{showHistory ? 'Hide History' : 'Show History'}{historyLoading ? '…' : ''}</TinyButton>
           {showHistory && history.length > 0 && <TinyButton disabled>{history.length} snapshots</TinyButton>}
@@ -758,6 +788,26 @@ const App: React.FC = () => {
           </RecommendationsPanel>
         )}
       </Content>
+      {activationOpen && (
+        <ActivationBar>
+          <strong>Activate Pro</strong>
+          <ActivationRow>
+            <TokenInput placeholder="Paste activation token" value={activationToken} onChange={e => setActivationToken(e.target.value)} />
+            <TinyButton onClick={() => {
+              chrome.runtime.sendMessage({ action: 'activateToken', token: activationToken }, (resp) => {
+                if (resp?.success) {
+                  setActivationOpen(false); setActivationToken('');
+                  const { info, remaining } = resp.status || {};
+                  if (info) setLicenseStatus({ plan: info.plan, remaining: remaining ?? info.dailyAllowance, daily: info.dailyAllowance });
+                } else {
+                  alert(resp?.error || 'Activation failed');
+                }
+              });
+            }}>Activate</TinyButton>
+            <TinyButton onClick={() => setActivationOpen(false)}>Close</TinyButton>
+          </ActivationRow>
+        </ActivationBar>
+      )}
       <Footer>
         Product Listing Optimizer {offlineMode ? '(Offline Mode)' : '(Online Mode)'} v{(pkg?.version as string) || '1.0.0'}
       </Footer>

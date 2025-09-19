@@ -5,6 +5,7 @@ import { loadKeywords, saveKeywords, isOfflineMode, toggleOfflineMode, STORAGE_K
 import { PageMetadata, KeywordData } from './utils/types';
 import { optimizeProduct, optimizeProductWithProgress } from './background/aiOrchestrator';
 import { ProductData, ProductOptimizationResult } from './types/product';
+import { canConsume, consumeOne, refundOne, getStatus, activateToken } from './utils/licensing';
 
 // Holds the most recent product optimization result so popup or other parts can request it later.
 let latestProductOptimization: ProductOptimizationResult | null = null;
@@ -79,6 +80,31 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
       })();
       return true;
+    case 'getLicenseStatus':
+      (async () => {
+        try {
+          const status = await getStatus();
+          sendResponse({ success: true, status });
+        } catch (e:any) {
+          sendResponse({ success: false, error: e?.message || 'Failed to load license status' });
+        }
+      })();
+      return true;
+    case 'activateToken':
+      (async () => {
+        try {
+          const result = await activateToken(message.token as string);
+          if (!result.ok) {
+            sendResponse({ success: false, error: result.error || 'Invalid token' });
+            return;
+          }
+          const status = await getStatus();
+          sendResponse({ success: true, status });
+        } catch (e:any) {
+          sendResponse({ success: false, error: e?.message || 'Activation failed' });
+        }
+      })();
+      return true;
     case 'refreshProductOptimization':
       (async () => {
         if (!lastProductData) {
@@ -130,6 +156,30 @@ async function handlePageAnalysis(pageData: PageMetadata, sendResponseToContentS
   let productOptimization: ProductOptimizationResult | null = null;
 
   try {
+    // Quota gate (predictive consume)
+    const gate = await canConsume();
+    if (!gate.allowed) {
+      analysisMessage = 'Daily limit reached. Upgrade to continue full AI analysis.';
+      // Still allow scrape + heuristic optimization if productData present
+      if (productData) {
+        const offline = true; // force heuristic path when over limit
+        try {
+          const results = await optimizeProductWithProgress(productData, offline, (e) => {
+            chrome.runtime.sendMessage({ action: 'optimizationProgress', event: e });
+          });
+          productOptimization = buildOptimizationResult(productData, results);
+          latestProductOptimization = productOptimization;
+          saveProductOptimization(productOptimization).catch(()=>{});
+          appendProductOptimizationHistory(productOptimization).catch(()=>{});
+        } catch {}
+      }
+      // Notify UI
+      chrome.runtime.sendMessage({ action: 'quotaExceeded' });
+      sendResponseToContentScript({ success: false, message: analysisMessage });
+      return;
+    } else {
+      await consumeOne();
+    }
     console.log('BG: Analyzing page:', pageData.url);
     const offline = await isOfflineMode();
 
@@ -190,6 +240,8 @@ async function handlePageAnalysis(pageData: PageMetadata, sendResponseToContentS
     console.error('BG: Critical error in handlePageAnalysis orchestration:', (error as Error).message);
     analysisMessage = 'An unexpected error occurred during page analysis setup.';
     finalKeywords = await loadKeywords();
+    // Refund on critical orchestration error
+    try { await refundOne(); } catch {}
   }
 
   // Respond to content script
