@@ -190,6 +190,19 @@ const Badge = styled.span`
   text-transform: uppercase;
   margin-left: 6px;
 `;
+const UsageMeter = styled.div`
+  height: 6px;
+  background: #eee;
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 6px 0 10px;
+`;
+const UsageFill = styled.div<{pct: number}>`
+  height: 100%;
+  width: ${p => Math.min(100, Math.max(0, p.pct))}%;
+  background: ${p => p.pct >= 80 ? '#f59e0b' : '#10b981'};
+  transition: width .2s ease;
+`;
 const MetaDescriptionLabel = styled.strong`
   display: block;
   margin-top: 0.5rem;
@@ -641,9 +654,14 @@ const App: React.FC = () => {
           </TinyButton>
         </ButtonContainer>
         {licenseStatus && (
-          <Notice>
-            Daily allowance: {licenseStatus.daily} • Remaining today: {licenseStatus.remaining}
-          </Notice>
+          <div>
+            <Notice>
+              Daily allowance: {licenseStatus.daily} • Remaining today: {licenseStatus.remaining}
+            </Notice>
+            <UsageMeter>
+              <UsageFill pct={((licenseStatus.daily - licenseStatus.remaining) / Math.max(1, licenseStatus.daily)) * 100} />
+            </UsageMeter>
+          </div>
         )}
         <InlineActions style={{marginBottom: '0.5rem'}}>
           <TinyButton onClick={toggleHistory} disabled={historyLoading}>{showHistory ? 'Hide History' : 'Show History'}{historyLoading ? '…' : ''}</TinyButton>

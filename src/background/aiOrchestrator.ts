@@ -1,8 +1,44 @@
 import { AiTaskRequest, AiTaskResponse, AiTaskType, ProductData, LongTailSuggestion, MetaSuggestion, RewrittenBullet, GapResult } from '../types/product';
 import { getAIAnalysis } from '../utils/api';
 
-// Simple in-memory cache (session only) - will extend to persistent later
+// Simple in-memory cache (session)
 const cache = new Map<string, any>();
+// Persistent cache (chrome.storage.local) with TTL
+const PERSISTENT_CACHE_KEY = 'ai_cache_v1';
+const PERSIST_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+async function getPersistentCache(storeKey: string): Promise<any | null> {
+  return new Promise((resolve) => {
+    try {
+      chrome.storage.local.get(PERSISTENT_CACHE_KEY, (res) => {
+        const bucket = (res && res[PERSISTENT_CACHE_KEY]) || {};
+        const entry = bucket[storeKey];
+        if (!entry) return resolve(null);
+        if (typeof entry.ts !== 'number' || (Date.now() - entry.ts) > PERSIST_TTL_MS) {
+          // expired
+          try {
+            delete bucket[storeKey];
+            chrome.storage.local.set({ [PERSISTENT_CACHE_KEY]: bucket }, () => resolve(null));
+          } catch { resolve(null); }
+          return;
+        }
+        resolve(entry.data);
+      });
+    } catch { resolve(null); }
+  });
+}
+
+async function setPersistentCache(storeKey: string, data: any): Promise<void> {
+  return new Promise((resolve) => {
+    try {
+      chrome.storage.local.get(PERSISTENT_CACHE_KEY, (res) => {
+        const bucket = (res && res[PERSISTENT_CACHE_KEY]) || {};
+        bucket[storeKey] = { data, ts: Date.now() };
+        chrome.storage.local.set({ [PERSISTENT_CACHE_KEY]: bucket }, () => resolve());
+      });
+    } catch { resolve(); }
+  });
+}
 
 function hash(obj: any): string {
   try { return btoa(unescape(encodeURIComponent(JSON.stringify(obj)))).slice(0, 64); } catch { return Math.random().toString(36).slice(2); }
@@ -83,11 +119,17 @@ async function runTask(req: AiTaskRequest, product: ProductData): Promise<AiTask
   if (cache.has(cacheKey)) {
     return { task: req.task, success: true, data: cache.get(cacheKey), cacheHit: true, elapsedMs: 0 };
   }
+  const persisted = await getPersistentCache(cacheKey);
+  if (persisted != null) {
+    cache.set(cacheKey, persisted);
+    return { task: req.task, success: true, data: persisted, cacheHit: true, elapsedMs: 0 };
+  }
 
   try {
     if (req.offline) {
       const data = runHeuristic(req.task, product);
-      cache.set(cacheKey, data);
+  cache.set(cacheKey, data);
+  setPersistentCache(cacheKey, data).catch(()=>{});
       return { task: req.task, success: true, data, elapsedMs: performance.now() - start, fallbackUsed: true };
     }
 
@@ -101,6 +143,7 @@ async function runTask(req: AiTaskRequest, product: ProductData): Promise<AiTask
           parsed = heuristicLongTail(product);
         }
         cache.set(cacheKey, parsed);
+        setPersistentCache(cacheKey, parsed).catch(()=>{});
         return { task: req.task, success: true, data: parsed, elapsedMs: performance.now() - start, fallbackUsed: !isLongTailArray(parsed) };
       }
       case 'generate.meta': {
@@ -109,6 +152,7 @@ async function runTask(req: AiTaskRequest, product: ProductData): Promise<AiTask
         let meta: MetaSuggestion = heuristicMeta(product);
         try { const j = JSON.parse(raw); if (isMetaSuggestion(j)) { meta = { metaTitle: j.metaTitle.slice(0,60), metaDescription: j.metaDescription.slice(0,160), metaTitleLength: Math.min(j.metaTitle.length,60), metaDescriptionLength: Math.min(j.metaDescription.length,160) }; } } catch {}
         cache.set(cacheKey, meta);
+        setPersistentCache(cacheKey, meta).catch(()=>{});
         return { task: req.task, success: true, data: meta, elapsedMs: performance.now() - start };
       }
       case 'rewrite.bullets': {
@@ -120,6 +164,7 @@ async function runTask(req: AiTaskRequest, product: ProductData): Promise<AiTask
           results = heuristicBullets(product);
         }
         cache.set(cacheKey, results);
+        setPersistentCache(cacheKey, results).catch(()=>{});
         return { task: req.task, success: true, data: results, elapsedMs: performance.now() - start };
       }
       case 'detect.gaps': {
@@ -127,6 +172,7 @@ async function runTask(req: AiTaskRequest, product: ProductData): Promise<AiTask
         const gaps = heuristicGaps(product);
         const validated = isGapResult(gaps) ? gaps : heuristicGaps(product);
         cache.set(cacheKey, validated);
+        setPersistentCache(cacheKey, validated).catch(()=>{});
         return { task: req.task, success: true, data: validated, elapsedMs: performance.now() - start, fallbackUsed: true };
       }
       default:
