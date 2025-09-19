@@ -39,8 +39,10 @@ module.exports = {
     new CopyWebpackPlugin({
       patterns: [
         { from: 'public/manifest.json', to: '.' },
-        { from: 'public/icons', to: 'icons' },
-        { from: 'assets/dist', to: 'assets/dist' }
+  // Copy default icons from public (fallback/legacy)
+  { from: 'public/icons', to: 'icons', noErrorOnMissing: true },
+  // Copy the entire assets pipeline output if present (preferred)
+  { from: 'assets/dist', to: 'assets/dist', noErrorOnMissing: true }
       ]
     })
   ],

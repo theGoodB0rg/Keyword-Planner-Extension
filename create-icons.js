@@ -23,9 +23,7 @@ function saveBase64ToPng(base64Data, filePath) {
 
 // Ensure directories exist
 const publicIconsDir = path.join(__dirname, 'public', 'icons');
-const distIconsDir = path.join(__dirname, 'dist', 'icons');
 ensureDirectoryExists(publicIconsDir);
-ensureDirectoryExists(distIconsDir);
 
 // Create icon files with different colors for different sizes
 const iconSizes = [16, 48, 128];
@@ -34,13 +32,9 @@ const iconColors = [BLUE_PIXEL_PNG, GREEN_PIXEL_PNG, RED_PIXEL_PNG];
 iconSizes.forEach((size, index) => {
   const color = iconColors[index % iconColors.length];
   
-  // Save to public/icons
+  // Save to public/icons (webpack copies to dist)
   const publicPath = path.join(publicIconsDir, `icon${size}.png`);
   saveBase64ToPng(color, publicPath);
-  
-  // Save to dist/icons
-  const distPath = path.join(distIconsDir, `icon${size}.png`);
-  saveBase64ToPng(color, distPath);
 });
 
 console.log('All icon files have been created successfully!'); 

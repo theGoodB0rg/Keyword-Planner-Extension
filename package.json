@@ -8,6 +8,7 @@
     "dev": "webpack --watch --mode=development",
     "build": "webpack --mode=production",
     "build:full": "node build.js",
+    "icons": "node create-icons.js && node create-simple-icons.js",
     "test": "jest --passWithNoTests",
     "test:watch": "jest --watch",
     "optimize:svgs": "svgo -f assets/src -o assets/src",
