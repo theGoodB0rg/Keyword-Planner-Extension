@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "webpack --watch --mode=development",
-    "build": "webpack --mode=production",
+    "build": "webpack --mode=production && node scripts/sync-icons.js",
     "build:full": "node build.js",
     "icons": "node create-icons.js && node create-simple-icons.js",
     "test": "jest --passWithNoTests",
