@@ -417,3 +417,27 @@ function buildOptimizationResult(product: ProductData, responses: any[]): Produc
   }
   return result;
 }
+
+// Handle extension icon click to open side panel (like Copilot)
+chrome.action.onClicked.addListener(async (tab) => {
+  if (tab.id && tab.windowId) {
+    try {
+      // Use the correct Chrome Side Panel API
+      await (chrome as any).sidePanel.open({ windowId: tab.windowId });
+      console.log('BG: Side panel opened for window', tab.windowId);
+    } catch (error) {
+      console.error('BG: Error opening side panel:', error);
+      // Fallback: try enabling the panel first
+      try {
+        await (chrome as any).sidePanel.setOptions({
+          tabId: tab.id,
+          enabled: true
+        });
+        await (chrome as any).sidePanel.open({ windowId: tab.windowId });
+        console.log('BG: Side panel enabled and opened');
+      } catch (fallbackError) {
+        console.error('BG: Fallback failed:', fallbackError);
+      }
+    }
+  }
+});

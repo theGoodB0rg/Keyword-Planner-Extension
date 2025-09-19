@@ -13,8 +13,8 @@ function verifyExtension() {
   // Required files
   const requiredFiles = [
     'manifest.json',
-    'popup.html',
-    'popup.js',
+    'sidebar.html',
+    'sidebar.js',
     'background.js',
     'contentScript.js',
     'icons/icon16.png',
