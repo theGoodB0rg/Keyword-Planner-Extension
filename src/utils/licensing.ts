@@ -2,6 +2,7 @@
 // Token format (initial): base64(JSON.stringify({ plan, dailyAllowance, features, expiresAt? }))
 
 import { saveData, loadData } from './storage';
+import { importEs256PublicKey, verifyJwsEs256, isExpValid, ES256Jwk } from './crypto';
 
 export type PlanName = 'free' | 'pro' | 'enterprise';
 
@@ -82,19 +83,53 @@ export async function refundOne(): Promise<{ info: LicenseInfo; remaining: numbe
 
 // Activation: decode token and persist as LicenseInfo (no crypto yet; stub for beta)
 export async function activateToken(token: string): Promise<{ ok: boolean; info?: LicenseInfo; error?: string }> {
+  // Dev escape hatch for private beta: allow base64 JSON if token starts with 'dev.'
+  if (token.startsWith('dev.')) {
+    try {
+      const json = JSON.parse(atob(token.slice(4)));
+      const plan = (json.plan || 'free') as PlanName;
+      const dailyAllowance = Number(json.dailyAllowance ?? (plan === 'pro' ? 200 : 5));
+      const features = typeof json.features === 'object' && json.features ? json.features : {};
+      const info: LicenseInfo = ensureReset({
+        plan,
+        dailyAllowance: Math.max(1, dailyAllowance),
+        usedToday: 0,
+        features,
+        expiresAt: typeof json.expiresAt === 'number' ? json.expiresAt : undefined,
+        trial: !!json.trial,
+        lastResetDay: utcDayString(),
+      });
+      await saveLicense(info);
+      return { ok: true, info };
+    } catch {
+      return { ok: false, error: 'Invalid dev token' };
+    }
+  }
+
   try {
-    const json = JSON.parse(atob(token));
-    // Basic validation
-    const plan = (json.plan || 'free') as PlanName;
-    const dailyAllowance = Number(json.dailyAllowance ?? (plan === 'pro' ? 200 : 5));
-    const features = typeof json.features === 'object' && json.features ? json.features : {};
+    // Expect JWS (ES256) format header.payload.signature
+    // Public key should be embedded (safe; verify-only) or loaded from config.
+    const pubJwk: ES256Jwk = {
+      kty: 'EC', crv: 'P-256',
+      // Placeholder coordinates — replace with your real public key before release
+      x: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+      y: 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+    };
+    const pub = await importEs256PublicKey(pubJwk);
+    const verified = await verifyJwsEs256(token, pub);
+    if (!verified) return { ok: false, error: 'Signature verification failed' };
+    const payload = verified.payload || {};
+    if (!isExpValid(payload.expiresAt)) return { ok: false, error: 'Token expired' };
+    const plan = (payload.plan || 'free') as PlanName;
+    const dailyAllowance = Number(payload.dailyAllowance ?? (plan === 'pro' ? 200 : 5));
+    const features = typeof payload.features === 'object' && payload.features ? payload.features : {};
     const info: LicenseInfo = ensureReset({
       plan,
       dailyAllowance: Math.max(1, dailyAllowance),
       usedToday: 0,
       features,
-      expiresAt: typeof json.expiresAt === 'number' ? json.expiresAt : undefined,
-      trial: !!json.trial,
+      expiresAt: typeof payload.expiresAt === 'number' ? payload.expiresAt : undefined,
+      trial: !!payload.trial,
       lastResetDay: utcDayString(),
     });
     await saveLicense(info);

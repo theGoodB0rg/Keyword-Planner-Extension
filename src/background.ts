@@ -10,6 +10,8 @@ import { canConsume, consumeOne, refundOne, getStatus, activateToken } from './u
 // Holds the most recent product optimization result so popup or other parts can request it later.
 let latestProductOptimization: ProductOptimizationResult | null = null;
 let lastProductData: ProductData | null = null; // cache last scraped product for refresh
+let lastAnalyzeAt = 0;
+const ANALYZE_DEBOUNCE_MS = 4000; // avoid spam & accidental double clicks
 
 chrome.runtime.onInstalled.addListener(() => {
   console.log('BG: AI Keyword Planner extension installed/updated.');
@@ -48,6 +50,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   switch (message.action) {
     case 'analyzePage': // This message comes from contentScript.ts
       if (message.data) {
+        // simple debounce to avoid rapid repeated analysis triggering multiple provider calls
+        const now = Date.now();
+        const elapsed = now - lastAnalyzeAt;
+        if (elapsed < ANALYZE_DEBOUNCE_MS) {
+          sendResponse({ success: false, error: `Please wait ${Math.ceil((ANALYZE_DEBOUNCE_MS - elapsed)/1000)}s before analyzing again.` });
+          return true;
+        }
+        lastAnalyzeAt = now;
         handlePageAnalysis(message.data as PageMetadata, sendResponse, message.productData as ProductData | null | undefined);
       } else {
         sendResponse({ success: false, error: 'No page data provided for analysis.' });
