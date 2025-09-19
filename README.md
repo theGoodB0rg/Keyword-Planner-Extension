@@ -89,6 +89,32 @@ npm run build
 
 This will create a production-ready build in the `dist` folder.
 
+## Asset Pipeline
+
+The extension includes a complete branding and asset generation pipeline:
+
+```bash
+# Generate all assets from source SVG
+npm run assets
+
+# Build assets individually
+npm run optimize:svgs  # Optimize SVG files
+npm run build:assets   # Generate PNG files from SVG
+```
+
+### Assets Structure
+- **Source**: `assets/src/logo.svg` - Single source vector file
+- **Output**: `assets/dist/**` - Generated raster images for all use cases
+  - Extension icons (16px - 256px)
+  - Toolbar/action icons
+  - Social media images (Open Graph, etc.)
+  - Chrome Web Store promotional tiles
+  - Favicons for documentation
+
+The asset pipeline automatically generates all required PNG files from the source SVG with appropriate sizing, backgrounds, and optimization. The GitHub Actions workflow automatically regenerates assets when the source SVG changes.
+
+See `assets/README.md` for detailed usage instructions.
+
 ## Architecture (High-Level)
 
 See `ARCHITECTURE.md` for the evolving module map.
