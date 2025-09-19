@@ -65,6 +65,20 @@ function verifyExtension() {
     }
     
     console.log('✓ manifest.json contains all required fields');
+
+    // Permissions sanity checks
+    const hasAllUrlsHost = Array.isArray(manifest.host_permissions) && manifest.host_permissions.some((m) => m === '<all_urls>');
+    const contentMatches = Array.isArray(manifest.content_scripts)
+      ? manifest.content_scripts.flatMap((cs) => cs.matches || [])
+      : [];
+    const hasAllUrlsContent = contentMatches.includes('<all_urls>');
+
+    if (hasAllUrlsHost || hasAllUrlsContent) {
+      console.error('Error: <all_urls> is not allowed in host_permissions or content_scripts.matches for store submission.');
+      success = false;
+    } else {
+      console.log('✓ No <all_urls> wildcard detected in manifest permissions.');
+    }
   } catch (err) {
     console.error(`Error reading or parsing manifest.json: ${err.message}`);
     success = false;

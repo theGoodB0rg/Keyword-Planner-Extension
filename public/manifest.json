@@ -11,7 +11,14 @@
     "sidePanel"
   ],
   "host_permissions": [
-    "<all_urls>"
+    "https://www.amazon.com/*",
+    "https://www.amazon.co.uk/*",
+    "https://www.amazon.ca/*",
+    "https://*.myshopify.com/*",
+    "https://*/products/*",
+    "https://*/product/*",
+    "http://localhost/*",
+    "https://localhost/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -28,7 +35,14 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": [
+        "https://www.amazon.com/*",
+        "https://www.amazon.co.uk/*",
+        "https://www.amazon.ca/*",
+        "https://*.myshopify.com/*",
+        "https://*/products/*",
+        "https://*/product/*"
+      ],
       "js": ["contentScript.js"]
     }
   ],
@@ -40,7 +54,14 @@
   "web_accessible_resources": [
     {
       "resources": ["icons/*"],
-      "matches": ["<all_urls>"]
+      "matches": [
+        "https://www.amazon.com/*",
+        "https://www.amazon.co.uk/*",
+        "https://www.amazon.ca/*",
+        "https://*.myshopify.com/*",
+        "https://*/products/*",
+        "https://*/product/*"
+      ]
     }
   ]
 } 
