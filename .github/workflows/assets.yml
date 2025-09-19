@@ -1,0 +1,28 @@
+name: Build and commit image assets
+on:
+  push:
+    paths:
+      - "assets/src/**"
+      - "scripts/export-images.js"
+      - "package.json"
+      - "svgo.config.js"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci || npm i
+      - run: npm run assets
+      - name: Commit updated assets
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore(assets): regenerate raster images"
+          file_pattern: assets/dist/**
