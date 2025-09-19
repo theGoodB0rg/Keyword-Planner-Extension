@@ -4,6 +4,7 @@ import ReactDOM from 'react-dom';
 import styled from 'styled-components';
 
 import Header from './components/Header';
+import MarketIntelligencePanel from './components/MarketIntelligencePanel';
 // Try importing version from package.json (tsconfig has resolveJsonModule)
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
@@ -13,6 +14,7 @@ import { KeywordData } from './utils/types';
 import { isOfflineMode, toggleOfflineMode, loadKeywords as loadKeywordsFromStorage } from './utils/storage';
 import { ProductOptimizationResult, LongTailSuggestion, MetaSuggestion, RewrittenBullet, GapResult } from './types/product';
 import { AiTaskType } from './types/product';
+import { MarketIntelligenceResult, MarketIntelligenceEngine } from './utils/marketIntelligence';
 
 const Container = styled.div`
   font-family: Arial, sans-serif;
@@ -305,6 +307,10 @@ const App: React.FC = () => {
     'rewrite.bullets': { state: 'pending' },
     'detect.gaps': { state: 'pending' }
   });
+  
+  // Market Intelligence State
+  const [marketIntelligence, setMarketIntelligence] = useState<MarketIntelligenceResult | null>(null);
+  const [marketIntelligenceLoading, setMarketIntelligenceLoading] = useState<boolean>(false);
 
   useEffect(() => {
     loadInitialData();
@@ -610,6 +616,27 @@ const App: React.FC = () => {
     return recommendations;
   };
 
+  // Market Intelligence Handler
+  const handleMarketIntelligenceAnalysis = async () => {
+    if (!optimization?.product) {
+      setError('No product data available. Please analyze a product page first.');
+      return;
+    }
+
+    setMarketIntelligenceLoading(true);
+    try {
+      const keywordList = keywords.map(k => k.keyword);
+      const engine = MarketIntelligenceEngine.getInstance();
+      const result = await engine.analyzeMarket(optimization.product, keywordList);
+      setMarketIntelligence(result);
+    } catch (error) {
+      console.error('Market intelligence analysis failed:', error);
+      setError('Failed to analyze market data. Please try again.');
+    } finally {
+      setMarketIntelligenceLoading(false);
+    }
+  };
+
   return (
     <Container>
       <Header 
@@ -756,6 +783,13 @@ const App: React.FC = () => {
             )}
           </OptimizationPanel>
         )}
+
+        {/* Market Intelligence Panel */}
+        <MarketIntelligencePanel
+          data={marketIntelligence}
+          loading={marketIntelligenceLoading}
+          onRefresh={handleMarketIntelligenceAnalysis}
+        />
         
         {showRecommendations && keywords.length > 0 && (
           <RecommendationsPanel>
