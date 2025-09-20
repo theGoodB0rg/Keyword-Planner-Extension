@@ -6,8 +6,11 @@ import { KeywordData } from './types';
 const API_CONFIG = {
   // Primary endpoints (cloud-based)
   CLOUD: {
-    KEYWORD_ANALYSIS: 'https://api.yourdomain.com/analyze', // Replace if you have your own backend
-    USER_DATA: 'https://api.yourdomain.com/user' // Replace if you have your own backend
+    // For local development, route to the local proxy service to avoid 307/JS challenges
+    KEYWORD_ANALYSIS: (typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production')
+      ? 'http://localhost:8787/analyze'
+      : 'https://api.yourdomain.com/analyze',
+    USER_DATA: 'https://api.yourdomain.com/user'
   },
   // Local fallback (for development/testing)
   LOCAL: {
@@ -24,8 +27,10 @@ const API_CONFIG = {
       'https://api.deepseek.com/v1/completions' // Another example (replace placeholder key if used)
     ],
     PROXY: {
-      ENABLED: false,
-      URL: 'https://your-secure-proxy.example.com/ai' // See PROVIDER_CONFIG.md
+      ENABLED: (typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production'),
+      URL: (typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production')
+        ? 'http://localhost:8787/proxy/ai'
+        : 'https://your-secure-proxy.example.com/ai' // See PROVIDER_CONFIG.md
     }
   }
 };
@@ -145,12 +150,41 @@ Competition: low
  * and then call getAIAnalysis.
  */
 export async function analyzePageContent(pageContent: string): Promise<KeywordData[]> {
+  // Try local dev service first (fast timeout), then fallback to cloud URL
+  const tryLocal = async (): Promise<KeywordData[] | null> => {
+    const url = 'http://localhost:8787/analyze';
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 1500);
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: pageContent }),
+        signal: ctrl.signal,
+      });
+      clearTimeout(t);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const json = await resp.json();
+      if (Array.isArray(json)) return json as KeywordData[];
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
+  const local = await tryLocal();
+  if (local) {
+    console.log('Custom backend analysis (local proxy) successful.');
+    return local;
+  }
+
   console.log(`Attempting custom backend analysis: ${API_CONFIG.CLOUD.KEYWORD_ANALYSIS}`);
   try {
     const result = await fetchWithRetries<KeywordData[]>(
       API_CONFIG.CLOUD.KEYWORD_ANALYSIS,
       {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: pageContent }),
       }
     );
@@ -167,13 +201,33 @@ export async function analyzePageContent(pageContent: string): Promise<KeywordDa
  * Attempt AI service call with multiple fallback options.
  */
 export async function getAIAnalysis(prompt: string): Promise<string> {
+  // Try local proxy first (fast timeout)
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 1500);
+    const resp = await fetch('http://localhost:8787/proxy/ai', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider: 'openai', model: 'gpt-4o-mini', prompt, maxTokens: 800 }),
+      signal: ctrl.signal,
+    });
+    clearTimeout(t);
+    if (resp.ok) {
+      const data = await resp.json();
+      const content = (data && (data as any).content) || '';
+      if (content) return content;
+    }
+  } catch {
+    // ignore, will try other providers
+  }
   // If proxy is enabled, try it first
   if (API_CONFIG.AI.PROXY.ENABLED) {
     try {
       const resp = await fetch(API_CONFIG.AI.PROXY.URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'gpt-3.5-turbo', messages: [{ role: 'user', content: prompt }], max_tokens: 800 })
+        // token-proxy-service expects: { provider, model, prompt, temperature?, maxTokens? }
+        body: JSON.stringify({ provider: 'openai', model: 'gpt-4o-mini', prompt, maxTokens: 800 })
       });
       if (resp.ok) {
         const data = await resp.json();

@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { createSigner, getJWKS, getPublicJwk, getKeyId, ensureKeypair } from './keys';
 import { issueTokenHandler } from './routes/issueToken';
 import { aiProxyHandler } from './routes/proxyAi';
+import { analyzeHandler, analyzeInfoHandler } from './routes/analyze';
 import { rateLimit } from './rateLimit';
 
 const app = express();
@@ -25,6 +26,20 @@ app.use((req, res, next) => {
 // Health
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
+// Friendly root
+app.get('/', (_req, res) => res.json({
+  ok: true,
+  message: 'token-proxy-service',
+  endpoints: {
+    health: 'GET /health',
+    analyze: 'POST /analyze',
+    analyze_info: 'GET /analyze',
+    ai_proxy: 'POST /proxy/ai',
+    jwks: 'GET /.well-known/jwks.json',
+    issue_token: 'POST /issue-token'
+  }
+}));
+
 // JWKS
 app.get('/.well-known/jwks.json', rateLimit, async (_req, res) => {
   try {
@@ -40,6 +55,10 @@ app.post('/issue-token', rateLimit, issueTokenHandler);
 
 // AI Proxy
 app.post('/proxy/ai', rateLimit, aiProxyHandler);
+
+// Analyze page content into keyword data
+app.post('/analyze', rateLimit, analyzeHandler);
+app.get('/analyze', analyzeInfoHandler);
 
 const port = Number(process.env.PORT || 8787);
 ensureKeypair().then(() => {

@@ -1,6 +1,6 @@
 // /src/popup.tsx
 import React, { useEffect, useState } from 'react';
-import ReactDOM from 'react-dom';
+import { createRoot } from 'react-dom/client';
 import styled from 'styled-components';
 
 import Header from './components/Header';
@@ -197,10 +197,10 @@ const UsageMeter = styled.div`
   overflow: hidden;
   margin: 6px 0 10px;
 `;
-const UsageFill = styled.div<{pct: number}>`
+const UsageFill = styled.div<{ $pct: number }> `
   height: 100%;
-  width: ${p => Math.min(100, Math.max(0, p.pct))}%;
-  background: ${p => p.pct >= 80 ? '#f59e0b' : '#10b981'};
+  width: ${p => Math.min(100, Math.max(0, p.$pct))}%;
+  background: ${p => p.$pct >= 80 ? '#f59e0b' : '#10b981'};
   transition: width .2s ease;
 `;
 const MetaDescriptionLabel = styled.strong`
@@ -659,7 +659,7 @@ const App: React.FC = () => {
               Daily allowance: {licenseStatus.daily} • Remaining today: {licenseStatus.remaining}
             </Notice>
             <UsageMeter>
-              <UsageFill pct={((licenseStatus.daily - licenseStatus.remaining) / Math.max(1, licenseStatus.daily)) * 100} />
+              <UsageFill $pct={((licenseStatus.daily - licenseStatus.remaining) / Math.max(1, licenseStatus.daily)) * 100} />
             </UsageMeter>
           </div>
         )}
@@ -833,9 +833,12 @@ const App: React.FC = () => {
   );
 };
 
-ReactDOM.render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-  document.getElementById('root')
-);
+const container = document.getElementById('root');
+if (container) {
+  const root = createRoot(container);
+  root.render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>
+  );
+}

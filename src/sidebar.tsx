@@ -1,6 +1,6 @@
 // /src/popup.tsx
 import React, { useEffect, useState } from 'react';
-import ReactDOM from 'react-dom';
+import { createRoot } from 'react-dom/client';
 import styled from 'styled-components';
 
 import Header from './components/Header';
@@ -15,6 +15,8 @@ import { isOfflineMode, toggleOfflineMode, loadKeywords as loadKeywordsFromStora
 import { ProductOptimizationResult, LongTailSuggestion, MetaSuggestion, RewrittenBullet, GapResult } from './types/product';
 import { AiTaskType } from './types/product';
 import { MarketIntelligenceResult, MarketIntelligenceEngine } from './utils/marketIntelligence';
+import { Marketplace } from './utils/signals';
+import { loadByokConfig, saveByokConfig } from './utils/storage';
 
 const Container = styled.div`
   font-family: Arial, sans-serif;
@@ -193,6 +195,10 @@ const InlineActions = styled.div`
   margin-top: 0.5rem;
   flex-wrap: wrap;
 `;
+const InlineNote = styled.div`
+  font-size: 0.75rem;
+  color: #6b7280;
+`;
 const TinyButton = styled.button`
   background: #fff;
   border: 1px solid #d0d7de;
@@ -214,6 +220,12 @@ const Badge = styled.span`
   text-transform: uppercase;
   margin-left: 6px;
 `;
+const PreviewMeter = styled.div`
+  height: 6px; background: #eee; border-radius: 4px; overflow: hidden; margin: 6px 0 10px;
+`;
+const PreviewFill = styled.div<{ $pct: number }>`
+  height: 100%; width: ${p => Math.min(100, Math.max(0, p.$pct))}%; background: ${p => p.$pct >= 66 ? '#f59e0b' : '#10b981'};
+`;
 const MetaDescriptionLabel = styled.strong`
   display: block;
   margin-top: 0.5rem;
@@ -233,6 +245,41 @@ const TipContainer = styled.div`
 `;
 const NoMarginP = styled.p`
   margin: 0;
+`;
+
+// BYOK inline activation bar
+const ActivationBar = styled.div`
+  position: sticky;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border-top: 1px solid #e5e7eb;
+  padding: 8px 12px;
+  margin: 0 0.5rem 0.5rem;
+  border-radius: 0 0 8px 8px;
+  box-shadow: 0 -1px 2px rgba(0,0,0,0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+`;
+
+const ActivationRow = styled.div`
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  
+  select { height: 28px; border: 1px solid #d0d7de; border-radius: 4px; background: #fff; }
+`;
+
+const TokenInput = styled.input`
+  flex: 1;
+  min-width: 200px;
+  height: 28px;
+  border: 1px solid #d0d7de;
+  border-radius: 4px;
+  padding: 2px 8px;
 `;
 
 // History Viewer Styles
@@ -307,6 +354,12 @@ const App: React.FC = () => {
     'rewrite.bullets': { state: 'pending' },
     'detect.gaps': { state: 'pending' }
   });
+  const [marketplace, setMarketplace] = useState<Marketplace>('amazon.com');
+  const [byokEnabled, setByokEnabled] = useState<boolean>(false);
+  const [byokOpen, setByokOpen] = useState<boolean>(false);
+  const [byokProvider, setByokProvider] = useState<'gemini'|'openai'>('gemini');
+  const [byokKey, setByokKey] = useState('');
+  const [previewRemaining, setPreviewRemaining] = useState<number>(3);
   
   // Market Intelligence State
   const [marketIntelligence, setMarketIntelligence] = useState<MarketIntelligenceResult | null>(null);
@@ -390,6 +443,14 @@ const App: React.FC = () => {
         }
         setHistoryLoading(false);
       });
+      // Load BYOK config + preview remaining
+      (async () => {
+        const cfg = await loadByokConfig();
+        if (cfg?.enabled) { setByokEnabled(true); setByokProvider(cfg.provider); }
+        chrome.runtime.sendMessage({ action: 'getPreviewStatus' }, (resp) => {
+          if (resp?.success) setPreviewRemaining(resp.remaining ?? 0);
+        });
+      })();
     } catch (err) {
       setError('Failed to initialize.'); setKeywordsLoading(false); setOptimizationLoading(false);
     } finally {
@@ -447,6 +508,13 @@ const App: React.FC = () => {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred.');
       setIsAnalyzing(false); setKeywordsLoading(false); setOptimizationLoading(false);
     }
+  };
+
+  const openByok = () => setByokOpen(true);
+  const validateAndSaveByok = async () => {
+    if (!byokKey.trim()) return;
+    await saveByokConfig({ enabled: true, provider: byokProvider, key: byokKey.trim() });
+    setByokEnabled(true); setByokOpen(false); setByokKey('');
   };
 
   const handleToggleOfflineMode = async () => {
@@ -668,6 +736,10 @@ const App: React.FC = () => {
         <InlineActions style={{marginBottom: '0.5rem'}}>
           <TinyButton onClick={toggleHistory} disabled={historyLoading}>{showHistory ? 'Hide History' : 'Show History'}{historyLoading ? '…' : ''}</TinyButton>
           {showHistory && history.length > 0 && <TinyButton disabled>{history.length} snapshots</TinyButton>}
+          <InlineNote>
+            Instant AI improvements (preview). {byokEnabled ? 'BYOK enabled.' : `${previewRemaining} of 3 previews left.`}
+          </InlineNote>
+          {!byokEnabled && <TinyButton onClick={openByok}>Use your AI key</TinyButton>}
         </InlineActions>
         <KeywordTable keywords={keywords} loading={keywordsLoading} error={error} />
         {!optimization && optimizationLoading && (
@@ -687,8 +759,15 @@ const App: React.FC = () => {
             <PanelHeading>
               Product Optimization
               {offlineMode && <Badge>Heuristic</Badge>}
+              {!byokEnabled && <Badge>Preview</Badge>}
               {!offlineMode && optimizationLoading && <Badge>Updating</Badge>}
             </PanelHeading>
+            {!byokEnabled && (
+              <div>
+                <PreviewMeter><PreviewFill $pct={((3 - previewRemaining) / 3) * 100} /></PreviewMeter>
+                <InlineNote>Unlock full AI results, CSV export, and 30‑day trends with Pro, or connect your AI key.</InlineNote>
+              </div>
+            )}
             <OptSection>
               <strong>Tasks:</strong>
               <OptList>
@@ -815,6 +894,21 @@ const App: React.FC = () => {
           </RecommendationsPanel>
         )}
       </Content>
+      {byokOpen && (
+        <ActivationBar>
+          <strong>Use your AI key</strong>
+          <ActivationRow>
+            <select title="AI provider" aria-label="AI provider" value={byokProvider} onChange={(e: React.ChangeEvent<HTMLSelectElement>)=> setByokProvider(e.target.value as any)}>
+              <option value="gemini">Gemini</option>
+              <option value="openai">OpenAI</option>
+            </select>
+            <TokenInput placeholder="Paste your provider key" value={byokKey} onChange={(e: React.ChangeEvent<HTMLInputElement>)=> setByokKey(e.target.value)} />
+            <TinyButton onClick={validateAndSaveByok}>Validate and Enable</TinyButton>
+            <TinyButton onClick={()=> setByokOpen(false)}>Close</TinyButton>
+          </ActivationRow>
+          <InlineNote>Your key stays on this device and is never shared.</InlineNote>
+        </ActivationBar>
+      )}
       <Footer>
         Product Listing Optimizer {offlineMode ? '(Offline Mode)' : '(Online Mode)'} v{(pkg?.version as string) || '1.0.0'}
       </Footer>
@@ -822,9 +916,12 @@ const App: React.FC = () => {
   );
 };
 
-ReactDOM.render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-  document.getElementById('root')
-);
+const container = document.getElementById('root');
+if (container) {
+  const root = createRoot(container);
+  root.render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>
+  );
+}

@@ -6,15 +6,20 @@ import { extractPageContent, isProductPage } from './utils/scraper';
 import { PageMetadata } from './utils/types';
 import { scrapeProduct } from './content/scraper/productScraper';
 
+// Ensure we only initialize once per page
+let initialized = false;
+
 // Wait for the page to be fully loaded
 document.addEventListener('DOMContentLoaded', () => {
   // Add a small delay to ensure all content has loaded
-  setTimeout(initialize, 1000);
+  setTimeout(() => {
+    if (!initialized) initialize();
+  }, 1000);
 });
 
 // Initialize if document is already loaded
 if (document.readyState === 'complete') {
-  initialize();
+  if (!initialized) initialize();
 }
 
 /**
@@ -22,6 +27,8 @@ if (document.readyState === 'complete') {
  */
 function initialize() {
   try {
+    if (initialized) return;
+    initialized = true;
     console.log('AI Keyword Planner: Content script initialized');
 
     // Check if this page is a product or content-rich page worth analyzing
@@ -163,8 +170,12 @@ function storeLocally(pageData: PageMetadata) {
  * Set up the UI elements
  */
 function setupUI() {
+  // Avoid duplicate injection
+  if (document.getElementById('ai-keyword-planner-container')) return;
+
   // Create button container
   const container = document.createElement('div');
+  container.id = 'ai-keyword-planner-container';
   container.style.position = 'fixed';
   container.style.bottom = '20px';
   container.style.right = '20px';
@@ -172,6 +183,7 @@ function setupUI() {
   
   // Create the analyze button
   const button = document.createElement('button');
+  button.id = 'ai-keyword-planner-button';
   button.textContent = 'Analyze Keywords';
   button.style.backgroundColor = '#4285f4';
   button.style.color = 'white';
@@ -194,8 +206,8 @@ function setupUI() {
   
   // Add click handler
   button.addEventListener('click', () => {
-  const pageData = extractPageContent();
-  sendToBackground(pageData);
+    const pageData = extractPageContent();
+    sendToBackground(pageData);
     
     // Show loading indicator
     button.textContent = 'Analyzing...';

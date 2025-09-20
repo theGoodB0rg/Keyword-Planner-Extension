@@ -12,7 +12,10 @@ export const STORAGE_KEYS = {
   SETTINGS: 'app_settings',
   HISTORY: 'search_history',
   PRODUCT_OPTIMIZATION: 'product_optimization_latest',
-  PRODUCT_OPTIMIZATION_HISTORY: 'product_optimization_history'
+  PRODUCT_OPTIMIZATION_HISTORY: 'product_optimization_history',
+  SIGNALS_CACHE: 'signals_cache_v1',
+  BYOK_CONFIG: 'byok_config_v1',
+  AI_PREVIEW_INFO: 'ai_preview_info_v1'
 } as const;
 
 // Local storage fallback flag
@@ -215,4 +218,77 @@ export async function appendProductOptimizationHistory(result: ProductOptimizati
  */
 export async function loadProductOptimizationHistory(): Promise<ProductOptimizationResult[]> {
   return loadData<ProductOptimizationResult[]>(STORAGE_KEYS.PRODUCT_OPTIMIZATION_HISTORY, []);
+}
+
+// ---------------- Additional helpers: Signals cache, BYOK, Preview caps ----------------
+
+export type SignalsCacheEntry = {
+  data: any;
+  ts: number;
+  ttlMs: number;
+};
+
+export async function getSignalsCache(key: string): Promise<SignalsCacheEntry | null> {
+  const bucket = await loadData<Record<string, SignalsCacheEntry>>(STORAGE_KEYS.SIGNALS_CACHE, {});
+  const entry = bucket[key];
+  if (!entry) return null;
+  if (Date.now() - entry.ts > (entry.ttlMs || 0)) return null;
+  return entry;
+}
+
+export async function setSignalsCache(key: string, data: any, ttlMs: number): Promise<void> {
+  const bucket = await loadData<Record<string, SignalsCacheEntry>>(STORAGE_KEYS.SIGNALS_CACHE, {});
+  bucket[key] = { data, ts: Date.now(), ttlMs };
+  await saveData(STORAGE_KEYS.SIGNALS_CACHE, bucket);
+}
+
+export type ByokProvider = 'gemini' | 'openai';
+export interface ByokConfig { enabled: boolean; provider: ByokProvider; key: string; }
+
+export async function loadByokConfig(): Promise<ByokConfig | null> {
+  return loadData<ByokConfig | null>(STORAGE_KEYS.BYOK_CONFIG, null);
+}
+
+export async function saveByokConfig(cfg: ByokConfig | null): Promise<void> {
+  if (cfg == null) {
+    await saveData(STORAGE_KEYS.BYOK_CONFIG, null);
+  } else {
+    await saveData(STORAGE_KEYS.BYOK_CONFIG, cfg);
+  }
+}
+
+export interface AiPreviewInfo {
+  totalAllowance: number; // e.g., 3 total previews
+  used: number;           // increment when consumed
+  lastResetDay?: string;  // optional daily reset if used as daily cap
+}
+
+export async function loadAiPreviewInfo(defaults: AiPreviewInfo = { totalAllowance: 3, used: 0 }): Promise<AiPreviewInfo> {
+  return loadData<AiPreviewInfo>(STORAGE_KEYS.AI_PREVIEW_INFO, defaults);
+}
+
+export async function saveAiPreviewInfo(info: AiPreviewInfo): Promise<void> {
+  await saveData(STORAGE_KEYS.AI_PREVIEW_INFO, info);
+}
+
+export async function canUsePreview(): Promise<{ allowed: boolean; remaining: number; info: AiPreviewInfo }>{
+  const info = await loadAiPreviewInfo();
+  const remaining = Math.max(0, (info.totalAllowance || 0) - (info.used || 0));
+  return { allowed: remaining > 0, remaining, info };
+}
+
+export async function consumePreview(): Promise<{ remaining: number; info: AiPreviewInfo }>{
+  const info = await loadAiPreviewInfo();
+  info.used = (info.used || 0) + 1;
+  await saveAiPreviewInfo(info);
+  const remaining = Math.max(0, (info.totalAllowance || 0) - (info.used || 0));
+  return { remaining, info };
+}
+
+export async function refundPreview(): Promise<{ remaining: number; info: AiPreviewInfo }>{
+  const info = await loadAiPreviewInfo();
+  info.used = Math.max(0, (info.used || 0) - 1);
+  await saveAiPreviewInfo(info);
+  const remaining = Math.max(0, (info.totalAllowance || 0) - (info.used || 0));
+  return { remaining, info };
 }

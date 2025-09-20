@@ -199,7 +199,26 @@ export function isProductPage(): boolean {
   // Check for common product page indicators
   const hasProductSchema = document.querySelector('[itemtype*="Product"]') !== null;
   const hasPriceElement = document.querySelector('.price, #price, [itemprop="price"]') !== null;
-  const hasAddToCartButton = document.querySelector('[class*="cart" i], [id*="cart" i], [class*="basket" i], button:contains("Add")') !== null;
+  // Use safe detection for add-to-cart. :contains is not a valid CSS selector in querySelector, so check text manually.
+  const hasAddToCartButton = (() => {
+    try {
+      // Quick hits: elements/classes/ids that include cart/basket
+      if (document.querySelector('[class*="cart" i], [id*="cart" i], [class*="basket" i]')) {
+        return true;
+      }
+      // Scan common clickable elements for intent keywords
+      const candidates = Array.from(
+        document.querySelectorAll('button, [role="button"], input[type="submit"], a[role="button"], a.btn, .btn')
+      );
+      const keywordRe = /(add to cart|add to bag|add to basket|buy now|add item|add to trolley|add to basket)/i;
+      return candidates.some((el) => {
+        const label = (el as HTMLElement).innerText || el.getAttribute('aria-label') || el.getAttribute('value') || '';
+        return keywordRe.test(label);
+      });
+    } catch {
+      return false;
+    }
+  })();
   
   // Check URL for product indicators
   const urlIndicators = ['product', 'item', 'details', 'buy', 'shop'];
