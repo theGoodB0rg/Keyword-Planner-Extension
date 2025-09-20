@@ -48,3 +48,13 @@ export async function aiProxyHandler(req: Request, res: Response) {
     return res.status(500).json({ error: e?.message || 'Proxy failure' });
   }
 }
+
+export function aiProxyInfoHandler(_req: Request, res: Response) {
+  return res.json({
+    ok: true,
+    endpoint: '/proxy/ai',
+    method: 'POST',
+    expects: { model: 'string', prompt: 'string', temperature: 'number?', maxTokens: 'number?' },
+    example: { model: 'gpt-4o-mini', prompt: 'Hello from dev' }
+  });
+}

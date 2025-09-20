@@ -516,6 +516,12 @@ const App: React.FC = () => {
     await saveByokConfig({ enabled: true, provider: byokProvider, key: byokKey.trim() });
     setByokEnabled(true); setByokOpen(false); setByokKey('');
   };
+  const disableByok = async () => {
+    await saveByokConfig(null);
+    setByokEnabled(false);
+    setByokOpen(false);
+    setByokKey('');
+  };
 
   const handleToggleOfflineMode = async () => {
     setError(null); setKeywordsLoading(true); setOptimizationLoading(true);
@@ -740,6 +746,7 @@ const App: React.FC = () => {
             Instant AI improvements (preview). {byokEnabled ? 'BYOK enabled.' : `${previewRemaining} of 3 previews left.`}
           </InlineNote>
           {!byokEnabled && <TinyButton onClick={openByok}>Use your AI key</TinyButton>}
+          {byokEnabled && <TinyButton onClick={disableByok}>Disable BYOK</TinyButton>}
         </InlineActions>
         <KeywordTable keywords={keywords} loading={keywordsLoading} error={error} />
         {!optimization && optimizationLoading && (

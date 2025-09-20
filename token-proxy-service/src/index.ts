@@ -5,7 +5,7 @@ import helmet from 'helmet';
 import { z } from 'zod';
 import { createSigner, getJWKS, getPublicJwk, getKeyId, ensureKeypair } from './keys';
 import { issueTokenHandler } from './routes/issueToken';
-import { aiProxyHandler } from './routes/proxyAi';
+import { aiProxyHandler, aiProxyInfoHandler } from './routes/proxyAi';
 import { analyzeHandler, analyzeInfoHandler } from './routes/analyze';
 import { rateLimit } from './rateLimit';
 
@@ -55,6 +55,7 @@ app.post('/issue-token', rateLimit, issueTokenHandler);
 
 // AI Proxy
 app.post('/proxy/ai', rateLimit, aiProxyHandler);
+app.get('/proxy/ai', aiProxyInfoHandler);
 
 // Analyze page content into keyword data
 app.post('/analyze', rateLimit, analyzeHandler);
