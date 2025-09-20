@@ -6,6 +6,11 @@ All notable changes to this project will be documented in this file.
 - Security: Enforce signed activation tokens (ES256 JWS) with embedded public key; keep dev.* tokens for private beta only
 - Monetization: Activation flow now verifies expiry and plan fields; clearer errors surfaced to UI
 - Reliability: Added analyze debounce in background to prevent accidental double-runs and provider spam
+- Dev proxy: Added local analysis endpoint (POST /analyze) with browser-friendly GET /analyze info page; exposed GET /proxy/ai info page to avoid "Cannot GET" confusion
+- Dev wiring: Extension now prefers http://localhost:8787 in development with fast timeouts and graceful fallbacks to cloud providers and mock
+- UI: Migrated popup and sidebar to React 18 createRoot; switched styled-components to transient props to eliminate unknown-prop warnings
+- BYOK: Added "Disable BYOK" control in sidebar to bypass user keys and use OpenAI via local proxy; preference persisted in storage
+- DX: Added @types/cors; clarified EXT_SHARED_SECRET usage in dev; improved error messages and GET / info endpoint for quick manual checks
 
 ## [1.1.0] - 2025-09-19
 - Harden Amazon scraper and unsupported page notice
