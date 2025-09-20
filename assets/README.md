@@ -1,6 +1,10 @@
 # Assets guide
 
-This repo uses a single source vector (`assets/src/logo.svg`) to generate all raster images for the extension, store listings, and social cards.
+This repo uses vector sources in `assets/src/` to generate all raster images for the extension, store listings, and social cards.
+
+Sources:
+- `assets/src/logo.svg` (standard, with drop shadow): used for 128px+, store, and social.
+- `assets/src/logo-small.svg` (thicker glyph, no shadow): used for 16/32/48px icons and toolbar icons to keep them crisp.
 
 ## Generate locally
 ```bash
@@ -13,14 +17,14 @@ Outputs go to `assets/dist/**`.
 ## What gets exported
 
 - Extension icons (PNG):
-  - assets/dist/icons/icon-16.png
-  - assets/dist/icons/icon-32.png
-  - assets/dist/icons/icon-48.png
-  - assets/dist/icons/icon-128.png
-  - assets/dist/icons/icon-256.png
+  - assets/dist/icons/icon-16.png (small source)
+  - assets/dist/icons/icon-32.png (small source)
+  - assets/dist/icons/icon-48.png (small source)
+  - assets/dist/icons/icon-128.png (standard source)
+  - assets/dist/icons/icon-256.png (standard source)
 - Toolbar/action icons:
-  - assets/dist/icons/toolbar-16.png
-  - assets/dist/icons/toolbar-32.png
+  - assets/dist/icons/toolbar-16.png (small source)
+  - assets/dist/icons/toolbar-32.png (small source)
 - Social:
   - assets/dist/social/og-1200x630.png
   - assets/dist/social/square-1080.png
