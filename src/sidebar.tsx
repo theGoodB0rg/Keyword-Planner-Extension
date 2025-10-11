@@ -316,7 +316,9 @@ const SnapshotDetail = styled.div`
 `;
 
 const KeywordChip = styled.span`
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   background-color: #e9ecef;
   padding: 0.2rem 0.5rem;
   border-radius: 4px;
@@ -324,6 +326,46 @@ const KeywordChip = styled.span`
   margin-bottom: 0.5rem;
   font-size: 0.8rem;
 `;
+
+const ChipLabel = styled.span`
+  font-size: 0.75rem;
+  color: #212529;
+`;
+
+const ChipCopyButton = styled.button`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid rgba(66, 133, 244, 0.35);
+  background: #ffffff;
+  color: #2563eb;
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+
+  &:hover {
+    background: rgba(37, 99, 235, 0.08);
+    border-color: rgba(37, 99, 235, 0.55);
+    color: #1d4ed8;
+  }
+
+  &:focus-visible {
+    outline: 2px solid rgba(37, 99, 235, 0.4);
+    outline-offset: 2px;
+  }
+`;
+
+const ChipClipboardIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <path
+      fill="currentColor"
+      d="M16 4h-1.18A3 3 0 0012 2a3 3 0 00-2.82 2H8a2 2 0 00-2 2v13a2 2 0 002 2h8a2 2 0 002-2V6a2 2 0 00-2-2zm-4-1a1 1 0 011 1h-2a1 1 0 011-1zm4 16H8V6h1.18a3 3 0 002.82 2 3 3 0 002.82-2H16z"
+    />
+  </svg>
+);
 
 const ChipContainer = styled.div`
   display: flex;
@@ -886,8 +928,20 @@ const App: React.FC = () => {
                 <RecParagraph>{recommendation.content}</RecParagraph>
                 <ChipContainer>
                   {recommendation.keywords.map((kw, kwIdx) => (
-                    <KeywordChip key={kwIdx} title={`Search volume: ${kw.searchVolume}, CPC: $${kw.cpc.toFixed(2)}, Difficulty: ${kw.keywordDifficulty}/100`}>
-                      {kw.keyword}
+                    <KeywordChip
+                      key={kwIdx}
+                      title={`Search volume: ${kw.searchVolume}, CPC: $${kw.cpc.toFixed(2)}, Difficulty: ${kw.keywordDifficulty}/100`}
+                    >
+                      <ChipLabel>{kw.keyword}</ChipLabel>
+                      <ChipCopyButton
+                        type="button"
+                        onClick={() => navigator.clipboard.writeText(kw.keyword).catch(() => undefined)}
+                        aria-label={`Copy keyword ${kw.keyword}`}
+                        title="Copy keyword"
+                      >
+                        <ChipClipboardIcon />
+                        <span>Copy</span>
+                      </ChipCopyButton>
                     </KeywordChip>
                   ))}
                 </ChipContainer>
