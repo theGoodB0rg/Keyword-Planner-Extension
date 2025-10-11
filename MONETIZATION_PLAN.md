@@ -41,8 +41,9 @@ Stored in `chrome.storage.local` keyed `license.info`. Trials flagged with `tria
 Flow:
 1. On analyze trigger → increment predicted usage (optimistic)
 2. If result fails critically → decrement (refund)
-3. At 80% threshold fire `usage.limit.warning`
+3. At 80% threshold fire `usage.limit.warning` and surface the hero preview meter copy
 4. At limit: block AI tasks; allow scrape + offline heuristics; show upgrade CTA
+5. Activating BYOK disables the preview allowance and removes gating while the key is stored locally
 
 ### Upgrade Surfaces
 - Panel footer (Usage meter clickable)

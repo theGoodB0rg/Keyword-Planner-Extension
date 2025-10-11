@@ -40,6 +40,13 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Scan build for leaked provider keys
+        run: |
+          if grep -R "AIza" dist || grep -R "sk-" dist; then
+            echo "Detected potential provider key in build artifacts."
+            exit 1
+          fi
+
       - name: Archive dist
         uses: actions/upload-artifact@v4
         with:

@@ -17,6 +17,9 @@ Implemented (Transition + New Pivot Elements):
 - Product attribute scraping scaffold (title, price, bullets, specs, variants)
 - AI keyword text suggestions (legacy raw → structured parsing WIP)
 - Product optimization panel (long-tail, meta, bullets, gaps) with cached persistence
+- Hero dashboard with analysis progress meter, skeleton loading states, and toast notifications for key actions
+- Per-keyword controls: demand scoring, competitor snapshot, and one-click copy for each keyword row
+- Preview meter + BYOK toggle to bring your own provider key without shipping secrets
 - Split loading states (keywords vs optimization) for faster perceived response
 - Refresh optimization action (re-runs tasks without reloading page keywords)
 - Export & copy (text export + JSON copy for optimization result)
@@ -80,6 +83,11 @@ This will compile the extension and watch for changes.
 5. Testing offline mode
 
 The extension is built with offline capabilities by default. Toggle "Offline Mode" in the popup to test functionality without external API calls.
+
+### Provider keys & BYOK
+- For development you can rely on the built-in preview allowance (three AI runs) or toggle "Use your AI key" in the sidebar to persist a BYOK token in local storage.
+- Optional: set environment variables (e.g. `GEMINI_API_KEY`, `OPENAI_API_KEY`) before running `npm run dev` or `npm run build`. They are consumed at build time and skipped if not defined.
+- See `PROVIDER_CONFIG.md` for proxy recommendations and key management guidance.
 
 ## Building for Production
 

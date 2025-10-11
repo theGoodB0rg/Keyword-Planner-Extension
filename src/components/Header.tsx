@@ -18,15 +18,18 @@ const HeaderContainer = styled.header`
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1rem;
-  background-color: #f8f9fa;
-  border-bottom: 1px solid #e9ecef;
+  width: 100%;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 1.5rem clamp(1rem, 2vw, 2rem) 0.75rem;
+  color: var(--c-text, #0f172a);
 `;
 
 const Title = styled.h1`
   margin: 0;
-  font-size: 1.25rem;
-  color: #212529;
+  font-size: clamp(1.35rem, 3vw, 1.6rem);
+  font-weight: 700;
+  color: var(--c-text, #0f172a);
 `;
 
 const ToggleContainer = styled.div`
@@ -44,35 +47,38 @@ const ToggleLabel = styled.label`
 
 const ToggleSwitch = styled.div<ToggleSwitchProps>`
   position: relative;
-  width: 40px;
-  height: 20px;
-  background-color: ${props => props.$isChecked ? '#4285f4' : '#ced4da'};
-  border-radius: 20px;
-  transition: background-color 0.3s;
+  width: 48px;
+  height: 24px;
+  background: ${props => props.$isChecked ? 'linear-gradient(135deg, var(--c-accent, #2563eb), #3b82f6)' : 'rgba(148, 163, 184, 0.5)'};
+  border-radius: 999px;
+  transition: background 0.25s ease;
   margin-left: 0.5rem;
-  
+
   &::after {
     content: '';
     position: absolute;
-    width: 16px;
-    height: 16px;
+    width: 20px;
+    height: 20px;
     border-radius: 50%;
-    background-color: white;
+    background-color: #ffffff;
     top: 2px;
-    left: ${props => props.$isChecked ? '22px' : '2px'};
-    transition: left 0.3s;
+    left: ${props => props.$isChecked ? '26px' : '2px'};
+    transition: left 0.25s ease;
+    box-shadow: 0 4px 10px rgba(15, 23, 42, 0.15);
   }
 `;
 
 const StatusBadge = styled.span<StatusBadgeProps>`
   display: inline-block;
-  padding: 0.25rem 0.5rem;
-  border-radius: 0.25rem;
-  font-size: 0.75rem;
-  font-weight: bold;
-  margin-left: 0.5rem;
-  background-color: ${props => props.$isOffline ? '#f8d7da' : '#d4edda'};
-  color: ${props => props.$isOffline ? '#721c24' : '#155724'};
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin-left: 0.75rem;
+  background: ${props => props.$isOffline ? 'rgba(239,68,68,0.12)' : 'rgba(34,197,94,0.18)'};
+  color: ${props => props.$isOffline ? '#991b1b' : '#047857'};
+  text-transform: uppercase;
 `;
 
 const Header: React.FC<HeaderProps> = ({ isOfflineMode, onToggleOfflineMode }) => {

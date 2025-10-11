@@ -1,6 +1,7 @@
 // src/utils/api.ts
 
 import { KeywordData } from './types';
+import { loadByokConfig, ByokConfig } from './storage';
 
 // Configuration with fallback options
 const API_CONFIG = {
@@ -41,6 +42,66 @@ const RETRY_CONFIG = {
   BACKOFF_FACTOR: 1.5,
   INITIAL_DELAY: 1000 // ms
 };
+
+
+type ServiceType = 'openai' | 'gemini' | 'deepseek' | 'generic_openai_clone';
+
+function sanitizeKey(value?: string | null): string {
+  return (value || '').trim();
+}
+
+function resolveKeyFromByok(type: ServiceType, byok: ByokConfig | null): string | null {
+  if (!byok?.enabled) return null;
+  const candidate = sanitizeKey(byok.key);
+  if (!candidate) return null;
+
+  if (type === 'gemini' && byok.provider === 'gemini') {
+    return candidate;
+  }
+  if (type !== 'gemini' && byok.provider === 'openai') {
+    return candidate;
+  }
+  return null;
+}
+
+function resolveKeyFromEnv(type: ServiceType): string {
+  if (typeof process === 'undefined' || !process?.env) return '';
+
+  switch (type) {
+    case 'gemini':
+      return sanitizeKey(process.env.GEMINI_API_KEY || process.env.GOOGLE_GEMINI_API_KEY || '');
+    case 'openai':
+      return sanitizeKey(process.env.OPENAI_API_KEY || '');
+    case 'deepseek':
+      return sanitizeKey(process.env.DEEPSEEK_API_KEY || '');
+    default:
+      return sanitizeKey(process.env.OTHER_FALLBACK_AI_KEY || '');
+  }
+}
+
+function placeholderFor(type: ServiceType): string {
+  switch (type) {
+    case 'gemini':
+      return 'GEMINI_API_KEY_PLACEHOLDER';
+    case 'openai':
+      return 'YOUR_OPENAI_API_KEY_PLACEHOLDER';
+    case 'deepseek':
+      return 'YOUR_DEEPSEEK_API_KEY_PLACEHOLDER';
+    default:
+      return 'YOUR_OTHER_FALLBACK_KEY_PLACEHOLDER';
+  }
+}
+
+function resolveServiceKey(type: ServiceType, byok: ByokConfig | null): string {
+  const byokKey = resolveKeyFromByok(type, byok);
+  if (byokKey) return byokKey;
+
+  const envKey = resolveKeyFromEnv(type);
+  if (envKey) return envKey;
+
+  return placeholderFor(type);
+}
+
 
 /**
  * Makes an API request with built-in retries.
@@ -242,18 +303,32 @@ export async function getAIAnalysis(prompt: string): Promise<string> {
     }
   }
   // Define services to try, including the updated Gemini model
+  let byokConfig: ByokConfig | null = null;
+  try {
+    byokConfig = await loadByokConfig();
+  } catch (error) {
+    console.warn('getAIAnalysis: failed to load BYOK configuration; defaulting to placeholders.', (error as Error)?.message || error);
+  }
+
+  const serviceKeys = {
+    openai: resolveServiceKey('openai', byokConfig),
+    gemini: resolveServiceKey('gemini', byokConfig),
+    deepseek: resolveServiceKey('deepseek', byokConfig),
+    generic: resolveServiceKey('generic_openai_clone', byokConfig)
+  };
+
   const servicesToTry = [
-    { name: 'Primary AI (OpenAI/similar)', url: API_CONFIG.AI.PRIMARY, key: 'YOUR_OPENAI_API_KEY_PLACEHOLDER', type: 'openai' },
+    { name: 'Primary AI (OpenAI/similar)', url: API_CONFIG.AI.PRIMARY, key: serviceKeys.openai, type: 'openai' as const },
     // Fallback services from API_CONFIG.AI.FALLBACKS
     ...API_CONFIG.AI.FALLBACKS.map(url => {
       if (url.includes('generativelanguage.googleapis.com')) {
         // This will now use 'gemini-1.5-flash-latest' from API_CONFIG
-        return { name: 'Google Gemini', url, key: 'AIzaSyBmVyNU2oIdlHGljuVf9N7MOonf6hyuNQM', type: 'gemini' }; // YOUR GEMINI KEY
+        return { name: 'Google Gemini', url, key: serviceKeys.gemini, type: 'gemini' as const };
       } else if (url.includes('deepseek.com')) {
-        return { name: 'Deepseek', url, key: 'YOUR_DEEPSEEK_API_KEY_PLACEHOLDER', type: 'deepseek' };
+        return { name: 'Deepseek', url, key: serviceKeys.deepseek, type: 'deepseek' as const };
       }
       // Generic fallback for any other URLs in API_CONFIG.AI.FALLBACKS
-      return { name: 'Other Fallback AI', url, key: 'YOUR_OTHER_FALLBACK_KEY_PLACEHOLDER', type: 'generic_openai_clone' };
+      return { name: 'Other Fallback AI', url, key: serviceKeys.generic, type: 'generic_openai_clone' as const };
     })
   ];
 
@@ -292,9 +367,6 @@ export async function getAIAnalysis(prompt: string): Promise<string> {
             }
           });
           break;
-        default:
-          console.warn(`Unknown AI service type for ${service.name}. Skipping.`);
-          continue;
       }
 
       const response = await fetch(effectiveUrl, {
@@ -343,3 +415,9 @@ export async function getAIAnalysis(prompt: string): Promise<string> {
       return "Error: AI analysis completely failed, and local fallback also failed.";
   }
 }
+export const __private = {
+  resolveServiceKey,
+  placeholderFor,
+  resolveKeyFromEnv,
+  resolveKeyFromByok
+};

@@ -9,249 +9,227 @@ interface MarketIntelligencePanelProps {
 }
 
 const Panel = styled.div`
-  margin-top: 1.5rem;
-  padding: 1rem;
-  background: #ffffff;
-  border: 1px solid #e9ecef;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  display: grid;
+  gap: 1.25rem;
 `;
 
 const PanelHeader = styled.div`
   display: flex;
-  justify-content: between;
   align-items: center;
-  margin-bottom: 1rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 2px solid #f8f9fa;
+  justify-content: space-between;
+  gap: 0.75rem;
 `;
 
 const PanelTitle = styled.h3`
-  font-size: 1.1rem;
-  color: #212529;
   margin: 0;
-  font-weight: 600;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--c-text, #0f172a);
 `;
 
 const RefreshButton = styled.button`
-  background: #007bff;
-  color: white;
+  background: linear-gradient(135deg, var(--c-accent, #2563eb), #3b82f6);
+  color: #ffffff;
   border: none;
-  border-radius: 4px;
-  padding: 0.25rem 0.75rem;
-  font-size: 0.75rem;
+  border-radius: 12px;
+  padding: 0.45rem 0.95rem;
+  font-size: 0.8rem;
+  font-weight: 600;
   cursor: pointer;
-  transition: background-color 0.2s;
+  box-shadow: 0 14px 30px -20px rgba(37, 99, 235, 0.6);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
 
   &:hover:not(:disabled) {
-    background: #0056b3;
+    transform: translateY(-1px);
+    box-shadow: 0 18px 42px -24px rgba(37, 99, 235, 0.7);
+  }
+
+  &:active {
+    transform: translateY(0);
+    filter: brightness(0.97);
   }
 
   &:disabled {
-    background: #6c757d;
+    opacity: 0.55;
     cursor: not-allowed;
+    box-shadow: none;
   }
 `;
 
-const LoadingSpinner = styled.div`
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 2rem;
-  color: #6c757d;
-  font-size: 0.875rem;
+const LoadingState = styled.div`
+  padding: 1.5rem;
+  text-align: center;
+  font-size: 0.9rem;
+  color: var(--c-text-dim, #64748b);
 `;
 
-const Section = styled.div`
-  margin-bottom: 1.5rem;
-  
-  &:last-child {
-    margin-bottom: 0;
-  }
+const Section = styled.section`
+  display: grid;
+  gap: 0.75rem;
 `;
 
 const SectionTitle = styled.h4`
-  font-size: 0.95rem;
-  color: #495057;
-  margin: 0 0 0.75rem 0;
+  margin: 0;
+  font-size: 0.85rem;
   font-weight: 600;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  color: var(--c-text-dim, #64748b);
 `;
 
 const MetricGrid = styled.div`
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 0.75rem;
-  margin-bottom: 1rem;
 `;
 
 const MetricCard = styled.div`
-  background: #f8f9fa;
-  padding: 0.75rem;
-  border-radius: 4px;
+  border-radius: 12px;
+  border: 1px solid var(--c-border, #e2e8f0);
+  background: rgba(37, 99, 235, 0.05);
+  padding: 0.85rem;
   text-align: center;
 `;
 
 const MetricValue = styled.div`
-  font-size: 1.25rem;
-  font-weight: bold;
-  color: #212529;
-  margin-bottom: 0.25rem;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--c-text, #0f172a);
 `;
 
 const MetricLabel = styled.div`
+  margin-top: 0.25rem;
   font-size: 0.75rem;
-  color: #6c757d;
+  letter-spacing: 0.04em;
+  color: var(--c-text-dim, #64748b);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
 `;
 
 const CompetitorList = styled.div`
-  display: flex;
-  flex-direction: column;
+  display: grid;
   gap: 0.75rem;
 `;
 
 const CompetitorCard = styled.div`
-  background: #f8f9fa;
-  padding: 0.75rem;
-  border-radius: 4px;
-  border-left: 3px solid #007bff;
+  border-radius: 12px;
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  background: rgba(59, 130, 246, 0.08);
+  padding: 0.85rem;
 `;
 
 const CompetitorTitle = styled.div`
   font-weight: 600;
-  font-size: 0.875rem;
-  color: #212529;
-  margin-bottom: 0.25rem;
+  color: var(--c-text, #0f172a);
+  margin-bottom: 0.45rem;
 `;
 
 const CompetitorDetails = styled.div`
   display: flex;
-  justify-content: between;
-  align-items: center;
-  font-size: 0.75rem;
-  color: #6c757d;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  font-size: 0.8rem;
+  color: var(--c-text-dim, #64748b);
 `;
 
 const TrendList = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+  display: grid;
+  gap: 0.6rem;
 `;
 
-const TrendItem = styled.div<{ direction: 'up' | 'down' | 'stable' }>`
+const TrendItem = styled.div<{ direction: TrendData['trendDirection'] }>`
   display: flex;
-  justify-content: between;
   align-items: center;
-  padding: 0.5rem;
-  background: #f8f9fa;
-  border-radius: 4px;
-  border-left: 3px solid ${props => 
-    props.direction === 'up' ? '#28a745' : 
-    props.direction === 'down' ? '#dc3545' : 
-    '#6c757d'
-  };
+  justify-content: space-between;
+  border-radius: 10px;
+  border: 1px solid var(--c-border, #e2e8f0);
+  background: ${({ direction }) =>
+    direction === 'up'
+      ? 'rgba(34,197,94,0.12)'
+      : direction === 'down'
+        ? 'rgba(239,68,68,0.12)'
+        : 'rgba(148,163,184,0.12)'};
+  padding: 0.6rem 0.8rem;
+  font-size: 0.85rem;
 `;
 
 const TrendKeyword = styled.span`
-  font-size: 0.875rem;
-  color: #212529;
-  font-weight: 500;
-`;
-
-const TrendIndicator = styled.span<{ direction: 'up' | 'down' | 'stable' }>`
-  font-size: 0.75rem;
-  color: ${props => 
-    props.direction === 'up' ? '#28a745' : 
-    props.direction === 'down' ? '#dc3545' : 
-    '#6c757d'
-  };
   font-weight: 600;
+  color: var(--c-text, #0f172a);
 `;
 
-const RecommendationsList = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-`;
-
-const RecommendationItem = styled.div`
-  padding: 0.5rem;
-  background: #e8f5e8;
-  border-radius: 4px;
-  font-size: 0.875rem;
-  color: #155724;
-  border-left: 3px solid #28a745;
+const TrendIndicator = styled.span<{ direction: TrendData['trendDirection'] }>`
+  font-weight: 600;
+  color: ${({ direction }) =>
+    direction === 'up' ? '#047857' : direction === 'down' ? '#b91c1c' : '#475569'};
 `;
 
 const KeywordGapsList = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
+  display: grid;
+  gap: 0.6rem;
 `;
 
 const KeywordGapCategory = styled.div`
-  padding: 0.5rem;
-  background: #fff3cd;
-  border-radius: 4px;
-  border-left: 3px solid #ffc107;
+  border-radius: 10px;
+  border: 1px dashed var(--c-border, #e2e8f0);
+  padding: 0.75rem;
+  background: rgba(15, 23, 42, 0.03);
 `;
 
 const KeywordGapTitle = styled.div`
   font-weight: 600;
-  font-size: 0.875rem;
-  color: #856404;
-  margin-bottom: 0.25rem;
+  font-size: 0.85rem;
+  color: var(--c-text, #0f172a);
+  margin-bottom: 0.35rem;
 `;
 
 const KeywordGapItems = styled.div`
-  font-size: 0.75rem;
-  color: #856404;
+  font-size: 0.8rem;
+  color: var(--c-text-dim, #64748b);
 `;
 
-const EmptyState = styled.div`
-  text-align: center;
-  padding: 2rem;
-  color: #6c757d;
+const RecommendationsList = styled.ul`
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
 `;
 
-const PricePositioningCard = styled.div<{ position: 'low' | 'average' | 'high' }>`
-  background: ${props => 
-    props.position === 'low' ? '#d4edda' : 
-    props.position === 'high' ? '#f8d7da' : 
-    '#d1ecf1'
-  };
-  border: 1px solid ${props => 
-    props.position === 'low' ? '#c3e6cb' : 
-    props.position === 'high' ? '#f5c6cb' : 
-    '#b8daff'
-  };
-  color: ${props => 
-    props.position === 'low' ? '#155724' : 
-    props.position === 'high' ? '#721c24' : 
-    '#0c5460'
-  };
+const RecommendationItem = styled.li`
+  border-radius: 10px;
+  background: rgba(37, 99, 235, 0.06);
+  border: 1px solid rgba(37, 99, 235, 0.2);
   padding: 0.75rem;
-  border-radius: 4px;
-  font-size: 0.875rem;
+  font-size: 0.85rem;
+  color: var(--c-text, #0f172a);
 `;
 
-const MarketIntelligencePanel: React.FC<MarketIntelligencePanelProps> = ({
-  data,
-  loading,
-  onRefresh
-}) => {
-  if (loading) {
+const EmptyStateMessage = styled.div`
+  border-radius: 12px;
+  border: 1px dashed var(--c-border, #e2e8f0);
+  background: rgba(148, 163, 184, 0.08);
+  padding: 1rem;
+  text-align: center;
+  color: var(--c-text-dim, #64748b);
+`;
+
+const MarketIntelligencePanel: React.FC<MarketIntelligencePanelProps> = ({ data, loading, onRefresh }) => {
+  const renderTrendSymbol = (trend: TrendData['trendDirection']) => {
+    if (trend === 'up') return '▲';
+    if (trend === 'down') return '▼';
+    return '▶';
+  };
+
+  if (loading && !data) {
     return (
       <Panel>
         <PanelHeader>
-          <PanelTitle>🔍 Market Intelligence</PanelTitle>
+          <PanelTitle>Market Intelligence</PanelTitle>
+          <RefreshButton onClick={onRefresh} disabled>
+            Analyzing...
+          </RefreshButton>
         </PanelHeader>
-        <LoadingSpinner>
-          Analyzing market data and competitors...
-        </LoadingSpinner>
+        <LoadingState>Collecting competitor signals...</LoadingState>
       </Panel>
     );
   }
@@ -260,14 +238,14 @@ const MarketIntelligencePanel: React.FC<MarketIntelligencePanelProps> = ({
     return (
       <Panel>
         <PanelHeader>
-          <PanelTitle>🔍 Market Intelligence</PanelTitle>
+          <PanelTitle>Market Intelligence</PanelTitle>
           <RefreshButton onClick={onRefresh}>
             Analyze Market
           </RefreshButton>
         </PanelHeader>
-        <EmptyState>
-          Click "Analyze Market" to get competitor insights and trend data.
-        </EmptyState>
+        <EmptyStateMessage>
+          Run a market analysis to uncover competitor positioning and trending keywords.
+        </EmptyStateMessage>
       </Panel>
     );
   }
@@ -275,15 +253,14 @@ const MarketIntelligencePanel: React.FC<MarketIntelligencePanelProps> = ({
   return (
     <Panel>
       <PanelHeader>
-        <PanelTitle>🔍 Market Intelligence</PanelTitle>
+        <PanelTitle>Market Intelligence</PanelTitle>
         <RefreshButton onClick={onRefresh} disabled={loading}>
-          Refresh
+          {loading ? 'Refreshing...' : 'Refresh'}
         </RefreshButton>
       </PanelHeader>
 
-      {/* Market Overview */}
       <Section>
-        <SectionTitle>Market Overview</SectionTitle>
+        <SectionTitle>Market overview</SectionTitle>
         <MetricGrid>
           <MetricCard>
             <MetricValue>{data.marketInsights.competitionLevel.toUpperCase()}</MetricValue>
@@ -304,77 +281,68 @@ const MarketIntelligencePanel: React.FC<MarketIntelligencePanelProps> = ({
         </MetricGrid>
       </Section>
 
-      {/* Price Positioning */}
       <Section>
-        <SectionTitle>Price Positioning</SectionTitle>
-        <PricePositioningCard position={data.pricePositioning.position}>
-          <strong>Position:</strong> {data.pricePositioning.position.charAt(0).toUpperCase() + data.pricePositioning.position.slice(1)}
-          <br />
-          <strong>Market Average:</strong> ${data.pricePositioning.competitorAverage.toFixed(2)}
-          <br />
-          <strong>Recommended Range:</strong> ${data.pricePositioning.recommendedPriceRange.min.toFixed(2)} - ${data.pricePositioning.recommendedPriceRange.max.toFixed(2)}
-        </PricePositioningCard>
+        <SectionTitle>Price positioning</SectionTitle>
+        <MetricCard>
+          <div style={{ fontWeight: 600 }}>Position: {data.pricePositioning.position.charAt(0).toUpperCase() + data.pricePositioning.position.slice(1)}</div>
+          <div style={{ fontSize: '0.8rem', marginTop: '0.4rem', color: 'var(--c-text-dim, #64748b)' }}>
+            Market average {`$${data.pricePositioning.competitorAverage.toFixed(2)}`} • Recommended {`$${data.pricePositioning.recommendedPriceRange.min.toFixed(2)} - $${data.pricePositioning.recommendedPriceRange.max.toFixed(2)}`}
+          </div>
+        </MetricCard>
       </Section>
 
-      {/* Top Competitors */}
       <Section>
-        <SectionTitle>Top Competitors</SectionTitle>
+        <SectionTitle>Top competitors</SectionTitle>
         <CompetitorList>
-          {data.competitors.slice(0, 3).map((competitor, index) => (
+          {data.competitors.slice(0, 3).map((competitor: CompetitorData, index) => (
             <CompetitorCard key={index}>
               <CompetitorTitle>{competitor.title}</CompetitorTitle>
               <CompetitorDetails>
                 <span>${competitor.price.toFixed(2)}</span>
-                <span>★ {competitor.rating.toFixed(1)} ({competitor.reviewCount.toLocaleString()} reviews)</span>
+                <span>Rating {competitor.rating.toFixed(1)} ({competitor.reviewCount.toLocaleString()} reviews)</span>
               </CompetitorDetails>
             </CompetitorCard>
           ))}
         </CompetitorList>
       </Section>
 
-      {/* Keyword Trends */}
       <Section>
-        <SectionTitle>Keyword Trends</SectionTitle>
+        <SectionTitle>Keyword trends</SectionTitle>
         <TrendList>
-          {data.trends.slice(0, 5).map((trend, index) => (
+          {data.trends.slice(0, 5).map((trend: TrendData, index) => (
             <TrendItem key={index} direction={trend.trendDirection}>
               <TrendKeyword>{trend.keyword}</TrendKeyword>
               <TrendIndicator direction={trend.trendDirection}>
-                {trend.trendDirection === 'up' ? '↗' : trend.trendDirection === 'down' ? '↘' : '→'} 
-                {trend.trendPercentage > 0 ? '+' : ''}{trend.trendPercentage.toFixed(1)}%
+                {renderTrendSymbol(trend.trendDirection)} {trend.trendPercentage > 0 ? '+' : ''}{trend.trendPercentage.toFixed(1)}%
               </TrendIndicator>
             </TrendItem>
           ))}
         </TrendList>
       </Section>
 
-      {/* Keyword Gaps */}
       <Section>
-        <SectionTitle>Keyword Opportunities</SectionTitle>
+        <SectionTitle>Keyword opportunities</SectionTitle>
         <KeywordGapsList>
           {data.keywordGaps.missingKeywords.length > 0 && (
             <KeywordGapCategory>
-              <KeywordGapTitle>Missing Keywords</KeywordGapTitle>
+              <KeywordGapTitle>Missing keywords</KeywordGapTitle>
               <KeywordGapItems>{data.keywordGaps.missingKeywords.join(', ')}</KeywordGapItems>
             </KeywordGapCategory>
           )}
           {data.keywordGaps.opportunityKeywords.length > 0 && (
             <KeywordGapCategory>
-              <KeywordGapTitle>New Opportunities</KeywordGapTitle>
+              <KeywordGapTitle>New opportunities</KeywordGapTitle>
               <KeywordGapItems>{data.keywordGaps.opportunityKeywords.join(', ')}</KeywordGapItems>
             </KeywordGapCategory>
           )}
         </KeywordGapsList>
       </Section>
 
-      {/* Recommendations */}
       <Section>
-        <SectionTitle>AI Recommendations</SectionTitle>
+        <SectionTitle>AI recommendations</SectionTitle>
         <RecommendationsList>
           {data.marketInsights.recommendations.map((recommendation, index) => (
-            <RecommendationItem key={index}>
-              {recommendation}
-            </RecommendationItem>
+            <RecommendationItem key={index}>{recommendation}</RecommendationItem>
           ))}
         </RecommendationsList>
       </Section>

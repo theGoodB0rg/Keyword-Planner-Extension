@@ -11,6 +11,9 @@ All notable changes to this project will be documented in this file.
 - UI: Migrated popup and sidebar to React 18 createRoot; switched styled-components to transient props to eliminate unknown-prop warnings
 - BYOK: Added "Disable BYOK" control in sidebar to bypass user keys and use OpenAI via local proxy; preference persisted in storage
 - DX: Added @types/cors; clarified EXT_SHARED_SECRET usage in dev; improved error messages and GET / info endpoint for quick manual checks
+- UI: Sidebar hero redesigned with progress meter, skeleton loading states, toast feedback, and inline preview meter/BYOK toggle; keyword table now includes per-row copy and competitor snapshots
+- Testing: Added provider key resolution unit tests covering BYOK and environment-variable fallbacks
+- CI: Build workflow now scans the dist bundle for Google/OpenAI key signatures to prevent leaking secrets
 
 ## [1.1.0] - 2025-09-19
 - Harden Amazon scraper and unsupported page notice

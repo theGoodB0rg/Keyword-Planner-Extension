@@ -99,3 +99,9 @@ Flow: Toggle Offline Mode
 
 ---
 This plan guides the UI refactor; update as components are implemented.
+
+## 2025-09-20 Snapshot
+- Sidebar now opens with a hero banner, clear CTA copy, and toast notifications for copy/export actions.
+- Keyword table uses skeleton shimmers while data loads and exposes per-row copy plus competitor snapshot controls.
+- Progress board surfaced for AI tasks with color-coded states (queued, running, done, error).
+- Preview meter and BYOK toggles are inline, matching the monetization preview allowance described elsewhere.
