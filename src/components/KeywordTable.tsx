@@ -525,6 +525,14 @@ const SnapshotLegendIcon = () => (
 
 const REVIEW_BENCHMARK = 1200;
 
+type SnapshotMetric = {
+  key: 'ads' | 'reviews' | 'price';
+  label: string;
+  value: number;
+  tone?: 'warn' | 'alert';
+  display: string;
+};
+
 const clampPercent = (value: number) => Math.min(100, Math.max(0, Math.round(value)));
 
 const safeNumber = (value: number | null | undefined) => (
@@ -761,7 +769,7 @@ const KeywordTable: React.FC<KeywordTableProps> = ({ keywords, loading, error, o
     return `$${value.toFixed(2)}`;
   };
 
-  const getSnapshotMetrics = (snapshotData: SnapshotData) => {
+  const getSnapshotMetrics = (snapshotData: SnapshotData): SnapshotMetric[] => {
     const total = snapshotData.totalConsidered || 0;
     const sponsoredRatio = total > 0 ? (snapshotData.sponsoredCount / total) * 100 : 0;
     const reviews = safeNumber(snapshotData.medianReviews);
