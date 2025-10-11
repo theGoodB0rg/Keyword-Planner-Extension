@@ -26,29 +26,31 @@ const USE_LOCAL_STORAGE_FALLBACK = true;
  */
 export async function saveData<T>(key: string, data: T): Promise<void> {
   return new Promise((resolve, reject) => {
+    const fallbackToLocal = (err: unknown) => {
+      console.error('Chrome storage error:', err);
+      if (!USE_LOCAL_STORAGE_FALLBACK) {
+        reject(err instanceof Error ? err : new Error(String(err)));
+        return;
+      }
+      try {
+        localStorage.setItem(key, JSON.stringify(data));
+        resolve();
+      } catch (localError) {
+        console.error('Local storage fallback error:', localError);
+        reject(localError instanceof Error ? localError : new Error(String(localError)));
+      }
+    };
+
     try {
-      // Try to save to Chrome storage
       chrome.storage.local.set({ [key]: data }, () => {
         if (chrome.runtime.lastError) {
-          throw new Error(chrome.runtime.lastError.message);
+          fallbackToLocal(chrome.runtime.lastError);
+          return;
         }
         resolve();
       });
     } catch (error) {
-      console.error('Chrome storage error:', error);
-      
-      // Fallback to localStorage if Chrome storage fails
-      if (USE_LOCAL_STORAGE_FALLBACK) {
-        try {
-          localStorage.setItem(key, JSON.stringify(data));
-          resolve();
-        } catch (localError) {
-          console.error('Local storage fallback error:', localError);
-          reject(localError);
-        }
-      } else {
-        reject(error);
-      }
+      fallbackToLocal(error);
     }
   });
 }
@@ -58,13 +60,28 @@ export async function saveData<T>(key: string, data: T): Promise<void> {
  */
 export async function loadData<T>(key: string, defaultValue: T): Promise<T> {
   return new Promise((resolve) => {
+    const resolveFromLocal = () => {
+      if (USE_LOCAL_STORAGE_FALLBACK) {
+        try {
+          const localData = localStorage.getItem(key);
+          if (localData) {
+            resolve(JSON.parse(localData) as T);
+            return;
+          }
+        } catch (localError) {
+          console.error('Local storage fallback error:', localError);
+        }
+      }
+      resolve(defaultValue);
+    };
+
     try {
-      // Try to load from Chrome storage
       chrome.storage.local.get(key, (result) => {
         if (chrome.runtime.lastError) {
-          throw new Error(chrome.runtime.lastError.message);
+          console.warn('Chrome storage load error:', chrome.runtime.lastError);
+          resolveFromLocal();
+          return;
         }
-        
         if (result[key] !== undefined) {
           resolve(result[key] as T);
         } else {
@@ -73,23 +90,7 @@ export async function loadData<T>(key: string, defaultValue: T): Promise<T> {
       });
     } catch (error) {
       console.warn('Chrome storage load error:', error);
-      
-      // Fallback to localStorage if Chrome storage fails
-      if (USE_LOCAL_STORAGE_FALLBACK) {
-        try {
-          const localData = localStorage.getItem(key);
-          if (localData) {
-            resolve(JSON.parse(localData) as T);
-          } else {
-            resolve(defaultValue);
-          }
-        } catch (localError) {
-          console.error('Local storage fallback error:', localError);
-          resolve(defaultValue);
-        }
-      } else {
-        resolve(defaultValue);
-      }
+      resolveFromLocal();
     }
   });
 }
@@ -98,29 +99,32 @@ export async function loadData<T>(key: string, defaultValue: T): Promise<T> {
  * Clear all stored data
  */
 export async function clearAllData(): Promise<void> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
+    const fallbackClear = (err: unknown) => {
+      console.error('Chrome storage clear error:', err);
+      if (!USE_LOCAL_STORAGE_FALLBACK) {
+        reject(err instanceof Error ? err : new Error(String(err)));
+        return;
+      }
+      try {
+        localStorage.clear();
+      } catch (localError) {
+        console.error('Local storage fallback clear error:', localError);
+      } finally {
+        resolve();
+      }
+    };
+
     try {
-      // Clear Chrome storage
       chrome.storage.local.clear(() => {
         if (chrome.runtime.lastError) {
-          throw new Error(chrome.runtime.lastError.message);
+          fallbackClear(chrome.runtime.lastError);
+          return;
         }
         resolve();
       });
     } catch (error) {
-      console.error('Chrome storage clear error:', error);
-      
-      // Fallback to clearing localStorage
-      if (USE_LOCAL_STORAGE_FALLBACK) {
-        try {
-          localStorage.clear();
-          resolve();
-        } catch (localError) {
-          console.error('Local storage fallback clear error:', localError);
-          // We're just going to resolve anyway as a best effort
-          resolve();
-        }
-      }
+      fallbackClear(error);
     }
   });
 }

@@ -229,7 +229,6 @@ async function handlePageAnalysis(pageData: PageMetadata, sendResponseToContentS
     const gate = await canConsume();
     if (!gate.allowed) {
       analysisMessage = 'Daily limit reached. Upgrade to continue full AI analysis.';
-      // Still allow scrape + heuristic optimization if productData present
       if (productData) {
         const offline = true; // force heuristic path when over limit
         try {
@@ -237,13 +236,25 @@ async function handlePageAnalysis(pageData: PageMetadata, sendResponseToContentS
             chrome.runtime.sendMessage({ action: 'optimizationProgress', event: e });
           });
           productOptimization = buildOptimizationResult(productData, results);
+          productOptimization.offlineFallback = true;
+          productOptimization.quotaLimited = true;
           latestProductOptimization = productOptimization;
-          saveProductOptimization(productOptimization).catch(()=>{});
-          appendProductOptimizationHistory(productOptimization).catch(()=>{});
-        } catch {}
+          saveProductOptimization(productOptimization).catch(() => {});
+          appendProductOptimizationHistory(productOptimization).catch(() => {});
+          chrome.runtime.sendMessage({ action: 'productOptimizationUpdated', optimization: productOptimization });
+        } catch (err) {
+          console.warn('BG: Heuristic optimization failed while quota limited.', err);
+          chrome.runtime.sendMessage({
+            action: 'productOptimizationFailed',
+            error: (err as Error)?.message || 'Optimization unavailable while quota is exceeded.',
+            offline: true
+          });
+        }
+      } else {
+        latestProductOptimization = null;
+        chrome.runtime.sendMessage({ action: 'productOptimizationUnavailable', reason: 'noProductData' });
       }
-      // Notify UI
-      chrome.runtime.sendMessage({ action: 'quotaExceeded' });
+      chrome.runtime.sendMessage({ action: 'quotaExceeded', info: gate.info, remaining: gate.remaining });
       sendResponseToContentScript({ success: false, message: analysisMessage });
       return;
     } else {
@@ -308,14 +319,26 @@ async function handlePageAnalysis(pageData: PageMetadata, sendResponseToContentS
         const results = await optimizeProductWithProgress(productData, offline, (e) => {
           chrome.runtime.sendMessage({ action: 'optimizationProgress', event: e });
         });
+        const fallbackUsed = Array.isArray(results) && results.some((r: { fallbackUsed?: boolean }) => r?.fallbackUsed === true);
         productOptimization = buildOptimizationResult(productData, results);
-  latestProductOptimization = productOptimization; // cache globally
-  // Persist for later sessions (fire and forget)
-  saveProductOptimization(productOptimization).catch(err => console.warn('BG: Failed to persist product optimization', err));
-  appendProductOptimizationHistory(productOptimization).catch(err => console.warn('BG: Failed to append optimization history', err));
+        productOptimization.offlineFallback = offline || fallbackUsed;
+        productOptimization.quotaLimited = false;
+        latestProductOptimization = productOptimization; // cache globally
+        // Persist for later sessions (fire and forget)
+        saveProductOptimization(productOptimization).catch(err => console.warn('BG: Failed to persist product optimization', err));
+        appendProductOptimizationHistory(productOptimization).catch(err => console.warn('BG: Failed to append optimization history', err));
       } catch (e) {
         console.warn(`BG: Product optimization run failed (${offline ? 'offline/heuristic' : 'online'}).`, e);
+        chrome.runtime.sendMessage({
+          action: 'productOptimizationFailed',
+          error: (e as Error)?.message || 'Product optimization failed.',
+          offline
+        });
+        productOptimization = null;
       }
+    } else {
+      latestProductOptimization = null;
+      chrome.runtime.sendMessage({ action: 'productOptimizationUnavailable', reason: 'noProductData' });
     }
   } catch (error) {
     console.error('BG: Critical error in handlePageAnalysis orchestration:', (error as Error).message);

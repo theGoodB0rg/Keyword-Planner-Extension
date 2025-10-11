@@ -197,8 +197,8 @@ function extractCleanText(element: Element): string {
  */
 export function isProductPage(): boolean {
   // Check for common product page indicators
-  const hasProductSchema = document.querySelector('[itemtype*="Product"]') !== null;
-  const hasPriceElement = document.querySelector('.price, #price, [itemprop="price"]') !== null;
+  const hasProductSchema = document.querySelector('[itemtype*="Product" i], [itemtype*="Book" i], [itemtype*="Offer" i]') !== null;
+  const hasPriceElement = document.querySelector('[itemprop="price"], [data-a-color="price"], [class*="price" i], [id*="price" i]') !== null;
   // Use safe detection for add-to-cart. :contains is not a valid CSS selector in querySelector, so check text manually.
   const hasAddToCartButton = (() => {
     try {
@@ -225,13 +225,16 @@ export function isProductPage(): boolean {
   const urlHasProductIndicator = urlIndicators.some(indicator => 
     window.location.href.toLowerCase().includes(indicator)
   );
+  const amazonProductPath = /\/(?:dp|gp\/product)\//i.test(window.location.pathname);
+  const hasProductTitle = document.querySelector('#productTitle, #titleSection, h1[itemprop="name"], h1[data-feature-name="title"]') !== null;
   
   // Return true if multiple indicators are found
   let score = 0;
   if (hasProductSchema) score += 2;
   if (hasPriceElement) score += 1;
   if (hasAddToCartButton) score += 1;
-  if (urlHasProductIndicator) score += 1;
+  if (urlHasProductIndicator || amazonProductPath) score += 1;
+  if (hasProductTitle) score += 1;
   
   return score >= 2;
 } 

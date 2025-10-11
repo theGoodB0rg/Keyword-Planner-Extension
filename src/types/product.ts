@@ -54,4 +54,6 @@ export interface ProductOptimizationResult {
   rewrittenBullets?: RewrittenBullet[];
   gaps?: GapResult;
   timestamp: number;
+  offlineFallback?: boolean;
+  quotaLimited?: boolean;
 }

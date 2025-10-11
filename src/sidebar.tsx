@@ -384,6 +384,7 @@ const App: React.FC = () => {
   const [optimization, setOptimization] = useState<ProductOptimizationResult | null>(null);
   const [optimizationLoading, setOptimizationLoading] = useState<boolean>(false);
   const [optimizationError, setOptimizationError] = useState<string | null>(null);
+  const [quotaStatus, setQuotaStatus] = useState<{ plan?: string; remaining?: number; usedToday?: number; dailyAllowance?: number } | null>(null);
   const [exportStatus, setExportStatus] = useState<string | null>(null);
   const [history, setHistory] = useState<ProductOptimizationResult[]>([]);
   const [historyLoading, setHistoryLoading] = useState<boolean>(false);
@@ -414,26 +415,71 @@ const App: React.FC = () => {
   useEffect(() => {
     const messageListener = (message: any, sender: chrome.runtime.MessageSender, sendResponse: (response?: any) => void) => {
       console.log("Popup: Received runtime message:", message);
+      if (message.action === 'quotaExceeded') {
+        const info = message.info || {};
+        const remainingFromMessage = typeof message.remaining === 'number' ? message.remaining : undefined;
+        const calculatedRemaining = remainingFromMessage ?? (typeof info.dailyAllowance === 'number' && typeof info.usedToday === 'number'
+          ? Math.max(0, info.dailyAllowance - info.usedToday)
+          : undefined);
+        setQuotaStatus({
+          plan: info?.plan,
+          remaining: calculatedRemaining,
+          usedToday: info?.usedToday,
+          dailyAllowance: info?.dailyAllowance
+        });
+        const quotaMessage = 'Daily limit reached. Upgrade or connect your own key to continue full AI analysis.';
+        setError(quotaMessage);
+        setOptimizationError(quotaMessage);
+        setIsAnalyzing(false);
+        setKeywordsLoading(false);
+        setOptimizationLoading(false);
+        if (message.optimization) {
+          setOptimization(message.optimization);
+        }
+        return;
+      }
       if (message.action === 'keywordsUpdated') {
         console.log("Popup: 'keywordsUpdated' message received with keywords:", message.keywords);
         setKeywords(message.keywords || []);
-        setError(null); 
-        if (message.keywords && message.keywords.length === 0 && !isAnalyzing) { // Only show if not in midst of analysis
-            setError("Analysis complete, but no keywords were found for this page.");
+        setError(null);
+        setUnsupportedPage(null);
+        if (message.keywords && message.keywords.length === 0 && !isAnalyzing) {
+          setError('Analysis complete, but no keywords were found for this page.');
         }
         setKeywordsLoading(false);
         setIsAnalyzing(false);
+        setQuotaStatus(null);
       }
       if (message.action === 'pageUnsupported') {
         setUnsupportedPage(message.url || '');
+        setQuotaStatus(null);
         setKeywordsLoading(false);
+        setOptimizationLoading(false);
+        setOptimization(null);
+        setOptimizationError('Product optimization is only available on supported product pages.');
         setIsAnalyzing(false);
+        return;
+      }
+      if (message.action === 'productOptimizationUnavailable') {
+        setOptimization(null);
+        setOptimizationLoading(false);
+        setOptimizationError('Product optimization is only available on supported product pages.');
+        return;
+      }
+      if (message.action === 'productOptimizationFailed') {
+        setOptimizationLoading(false);
+        setOptimizationError(message.error || 'Product optimization failed.');
+        return;
       }
       if (message.action === 'productOptimizationUpdated') {
-        console.log("Popup: Product optimization update received", message.optimization);
+        console.log('Popup: Product optimization update received', message.optimization);
+        const limited = message.optimization?.quotaLimited === true;
         setOptimization(message.optimization || null);
         setOptimizationLoading(false);
-        setOptimizationError(null);
+        setOptimizationError(limited ? 'Showing heuristic suggestions because your daily AI limit was reached.' : null);
+        if (!limited) {
+          setQuotaStatus(null);
+        }
         // Prepend into history view (avoid duplication by timestamp)
         if (message.optimization && !history.find(h => h.timestamp === message.optimization.timestamp)) {
           setHistory(prev => [message.optimization, ...prev].slice(0, 10));
@@ -514,7 +560,8 @@ const App: React.FC = () => {
   };
 
   const handleAnalyzeCurrentPage = () => {
-  setIsAnalyzing(true); setKeywordsLoading(true); setOptimizationLoading(true); setError(null); setOptimizationError(null);
+    setQuotaStatus(null);
+    setIsAnalyzing(true); setKeywordsLoading(true); setOptimizationLoading(true); setError(null); setOptimizationError(null);
     // reset task statuses
     setTaskStatus({ 'generate.longTail': { state: 'pending' }, 'generate.meta': { state: 'pending' }, 'rewrite.bullets': { state: 'pending' }, 'detect.gaps': { state: 'pending' } });
     try {
@@ -765,6 +812,14 @@ const App: React.FC = () => {
             This page type isn’t supported for analysis yet.
           </Notice>
         )}
+        {quotaStatus && (
+          <Notice>
+            <strong>Daily limit reached.</strong>{' '}
+            {quotaStatus.plan ? `Plan: ${quotaStatus.plan}. ` : ''}
+            {typeof quotaStatus.remaining === 'number' ? `Remaining analyses today: ${quotaStatus.remaining}. ` : ''}
+            Connect your own key or upgrade to continue full AI suggestions.
+          </Notice>
+        )}
         <ButtonContainer>
           <ActionButton onClick={handleAnalyzeCurrentPage} disabled={isAnalyzing || keywordsLoading}>
             {isAnalyzing ? 'Analyzing...' : (keywordsLoading && !isAnalyzing ? 'Loading...' : 'Analyze Page')}
@@ -807,7 +862,8 @@ const App: React.FC = () => {
           <OptimizationPanel>
             <PanelHeading>
               Product Optimization
-              {offlineMode && <Badge>Heuristic</Badge>}
+              {(offlineMode || optimization?.offlineFallback) && <Badge>Heuristic</Badge>}
+              {optimization?.quotaLimited && <Badge>Quota</Badge>}
               {!byokEnabled && <Badge>Preview</Badge>}
               {!offlineMode && optimizationLoading && <Badge>Updating</Badge>}
             </PanelHeading>
