@@ -867,6 +867,12 @@ const App: React.FC = () => {
               {!byokEnabled && <Badge>Preview</Badge>}
               {!offlineMode && optimizationLoading && <Badge>Updating</Badge>}
             </PanelHeading>
+            {optimization.aiError && (
+              <Notice>
+                <strong>AI warning:</strong> {optimization.aiError}
+                {!byokEnabled && optimization.aiError.toLowerCase().includes('api key') && ' Add your key with "Use your AI key" to unlock full responses.'}
+              </Notice>
+            )}
             {!byokEnabled && (
               <div>
                 <PreviewMeter><PreviewFill $pct={((3 - previewRemaining) / 3) * 100} /></PreviewMeter>
@@ -941,7 +947,7 @@ const App: React.FC = () => {
                   <HistoryListItem key={h.timestamp}>
                     <HistoryRow>
                       <HistoryToggleButton onClick={() => viewSnapshot(idx)}>
-                        <strong>{new Date(h.timestamp).toLocaleTimeString()}</strong> {h.product?.title ? '– ' + (h.product.title.length > 40 ? h.product.title.slice(0,40)+'…' : h.product.title) : ''}
+                        <strong>{new Date(h.timestamp).toLocaleTimeString()}</strong> {h.product?.title ? '- ' + (h.product.title.length > 40 ? h.product.title.slice(0,40) + '...' : h.product.title) : ''}
                       </HistoryToggleButton>
                       <TinyButton onClick={() => applySnapshot(idx)}>Use</TinyButton>
                     </HistoryRow>

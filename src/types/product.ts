@@ -56,4 +56,5 @@ export interface ProductOptimizationResult {
   timestamp: number;
   offlineFallback?: boolean;
   quotaLimited?: boolean;
+  aiError?: string;
 }

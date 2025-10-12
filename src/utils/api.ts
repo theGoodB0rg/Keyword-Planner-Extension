@@ -43,6 +43,8 @@ const RETRY_CONFIG = {
   INITIAL_DELAY: 1000 // ms
 };
 
+const ECHO_PROXY_ERROR = "AI proxy running in echo mode (missing OpenAI API key).";
+
 
 type ServiceType = 'openai' | 'gemini' | 'deepseek' | 'generic_openai_clone';
 
@@ -276,10 +278,17 @@ export async function getAIAnalysis(prompt: string): Promise<string> {
     if (resp.ok) {
       const data = await resp.json();
       const content = (data && (data as any).content) || '';
+      const provider = (data && (data as any).provider) || '';
+      if (provider === 'echo' || (typeof content === 'string' && content.trim().startsWith('ECHO:'))) {
+        throw new Error('DEV_PROXY_ECHO');
+      }
       if (content) return content;
     }
-  } catch {
-    // ignore, will try other providers
+  } catch (err) {
+    if (err instanceof Error && err.message === 'DEV_PROXY_ECHO') {
+      throw new Error(ECHO_PROXY_ERROR);
+    }
+    // ignore other failures; downstream fallbacks will execute
   }
   // If proxy is enabled, try it first
   if (API_CONFIG.AI.PROXY.ENABLED) {
@@ -293,12 +302,19 @@ export async function getAIAnalysis(prompt: string): Promise<string> {
       if (resp.ok) {
         const data = await resp.json();
         const content = data?.content || '';
+        const provider = data?.provider;
+        if (provider === 'echo' || (typeof content === 'string' && content.trim().startsWith('ECHO:'))) {
+          throw new Error(ECHO_PROXY_ERROR);
+        }
         if (content) return content;
         console.warn('Proxy returned OK but no content.');
       } else {
         console.warn('Proxy call failed:', await resp.text());
       }
     } catch (e) {
+      if (e instanceof Error && e.message === ECHO_PROXY_ERROR) {
+        throw e;
+      }
       console.warn('Proxy call threw:', (e as Error).message);
     }
   }

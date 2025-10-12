@@ -223,11 +223,17 @@ async function handlePageAnalysis(pageData: PageMetadata, sendResponseToContentS
   let analysisMessage = '';
   let finalKeywords: KeywordData[] | null = null;
   let productOptimization: ProductOptimizationResult | null = null;
+  let byokConfig: any | null = null;
 
   try {
-    // Quota gate (predictive consume)
-    const gate = await canConsume();
-    if (!gate.allowed) {
+    try {
+      byokConfig = await loadByokConfig();
+    } catch (err) {
+      console.warn('BG: Failed to load BYOK config during quota gate:', (err as Error)?.message || err);
+    }
+    const skipQuotaForByok = !!byokConfig?.enabled;
+    const gate = skipQuotaForByok ? { allowed: true, remaining: Number.POSITIVE_INFINITY, info: null as any } : await canConsume();
+    if (!skipQuotaForByok && !gate.allowed) {
       analysisMessage = 'Daily limit reached. Upgrade to continue full AI analysis.';
       if (productData) {
         const offline = true; // force heuristic path when over limit
@@ -238,6 +244,14 @@ async function handlePageAnalysis(pageData: PageMetadata, sendResponseToContentS
           productOptimization = buildOptimizationResult(productData, results);
           productOptimization.offlineFallback = true;
           productOptimization.quotaLimited = true;
+          const aiErrors = results
+            .map((r: any) => (r && typeof r.error === 'string' ? r.error : null))
+            .filter((msg: string | null): msg is string => !!msg);
+          if (aiErrors.length) {
+            productOptimization.aiError = Array.from(new Set(aiErrors)).join(' | ');
+          } else {
+            productOptimization.aiError = 'Daily limit reached; showing heuristic suggestions.';
+          }
           latestProductOptimization = productOptimization;
           saveProductOptimization(productOptimization).catch(() => {});
           appendProductOptimizationHistory(productOptimization).catch(() => {});
@@ -257,7 +271,7 @@ async function handlePageAnalysis(pageData: PageMetadata, sendResponseToContentS
       chrome.runtime.sendMessage({ action: 'quotaExceeded', info: gate.info, remaining: gate.remaining });
       sendResponseToContentScript({ success: false, message: analysisMessage });
       return;
-    } else {
+    } else if (!skipQuotaForByok) {
       await consumeOne();
     }
     console.log('BG: Analyzing page:', pageData.url);
@@ -287,8 +301,8 @@ async function handlePageAnalysis(pageData: PageMetadata, sendResponseToContentS
         try {
           // Preview enforcement: if BYOK configured, skip preview counters; else consume preview allowance
           try {
-            const byok = await loadByokConfig();
-            if (!byok?.enabled) {
+            const activeByok = byokConfig ?? await loadByokConfig();
+            if (!activeByok?.enabled) {
               const pv = await canUsePreview();
               if (!pv.allowed) throw new Error('Preview limit reached');
               await consumePreview();
@@ -323,6 +337,14 @@ async function handlePageAnalysis(pageData: PageMetadata, sendResponseToContentS
         productOptimization = buildOptimizationResult(productData, results);
         productOptimization.offlineFallback = offline || fallbackUsed;
         productOptimization.quotaLimited = false;
+        const aiErrors = results
+          .map((r: any) => (r && typeof r.error === 'string' ? r.error : null))
+          .filter((msg: string | null): msg is string => !!msg);
+        if (aiErrors.length) {
+          productOptimization.aiError = Array.from(new Set(aiErrors)).join(' | ');
+        } else if (productOptimization.offlineFallback && offline) {
+          productOptimization.aiError = 'Offline mode enabled; showing heuristic suggestions.';
+        }
         latestProductOptimization = productOptimization; // cache globally
         // Persist for later sessions (fire and forget)
         saveProductOptimization(productOptimization).catch(err => console.warn('BG: Failed to persist product optimization', err));
