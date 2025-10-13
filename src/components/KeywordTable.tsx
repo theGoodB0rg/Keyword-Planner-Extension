@@ -611,6 +611,7 @@ const KeywordTable: React.FC<KeywordTableProps> = ({ keywords, loading, error, o
   const [snapshotMap, setSnapshotMap] = useState<Record<string, { loading: boolean; data?: SnapshotData }>>({});
   const [copiedKeyword, setCopiedKeyword] = useState<string | null>(null);
   const [legendOpen, setLegendOpen] = useState<boolean>(false);
+  const [demandLegendOpen, setDemandLegendOpen] = useState<boolean>(false);
   const copyResetRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -672,6 +673,72 @@ const KeywordTable: React.FC<KeywordTableProps> = ({ keywords, loading, error, o
   };
 
   const legendContentId = 'snapshot-legend-panel';
+  const demandLegendId = 'demand-score-legend-panel';
+
+  const demandLegendSection = (
+    <LegendBanner style={{ marginBottom: '0.75rem' }}>
+      <LegendHeader
+        type="button"
+        onClick={() => setDemandLegendOpen((prev) => !prev)}
+        aria-expanded={demandLegendOpen}
+        aria-controls={demandLegendId}
+      >
+        <LegendIconWrapper>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M3 3v18h18" />
+            <path d="M18 17l-5-5-4 4-6-6" />
+          </svg>
+        </LegendIconWrapper>
+        <LegendTitle>Understanding Demand Scores</LegendTitle>
+        <LegendChevron $open={demandLegendOpen}>
+          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
+            <path d="M4 3l4 3-4 3" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </LegendChevron>
+      </LegendHeader>
+      {demandLegendOpen && (
+        <LegendContent id={demandLegendId}>
+          <LegendDescription>
+            Demand scores combine search trends, seasonal patterns, and marketplace signals to estimate real-time buyer interest (0-100 scale).
+          </LegendDescription>
+          <LegendSwatchRow>
+            <LegendSwatchItem>
+              <LegendSwatch $tone="alert" />
+              0-32: Low demand
+            </LegendSwatchItem>
+            <LegendSwatchItem>
+              <LegendSwatch $tone="warn" />
+              33-65: Medium demand
+            </LegendSwatchItem>
+            <LegendSwatchItem>
+              <LegendSwatch $tone="base" />
+              66-100: High demand
+            </LegendSwatchItem>
+          </LegendSwatchRow>
+          <LegendList>
+            <LegendItem>
+              <LegendItemTitle>How it's calculated</LegendItemTitle>
+              <LegendItemDetail>
+                Based on search volume trends, seasonal multipliers, marketplace-specific patterns, and category velocity.
+              </LegendItemDetail>
+            </LegendItem>
+            <LegendItem>
+              <LegendItemTitle>Why it matters</LegendItemTitle>
+              <LegendItemDetail>
+                High-demand keywords (66+) drive more traffic but face more competition. Medium (33-65) offers balanced opportunity. Low (&lt;33) may require niche positioning or wait for seasonal upticks.
+              </LegendItemDetail>
+            </LegendItem>
+            <LegendItem>
+              <LegendItemTitle>Action tips</LegendItemTitle>
+              <LegendItemDetail>
+                Target high-demand keywords for peak seasons. Build content around medium-demand terms for steady growth. Use low-demand keywords to capture long-tail, high-intent buyers.
+              </LegendItemDetail>
+            </LegendItem>
+          </LegendList>
+        </LegendContent>
+      )}
+    </LegendBanner>
+  );
 
   const legendSection = (
     <LegendBanner>
@@ -726,6 +793,7 @@ const KeywordTable: React.FC<KeywordTableProps> = ({ keywords, loading, error, o
   if (loading) {
     return (
       <>
+        {demandLegendSection}
         {legendSection}
         <TableContainer aria-busy="true" aria-live="polite">
           <SkeletonWrapper>
@@ -747,6 +815,7 @@ const KeywordTable: React.FC<KeywordTableProps> = ({ keywords, loading, error, o
   if (error) {
     return (
       <>
+        {demandLegendSection}
         {legendSection}
         <ErrorMessage role="alert">{error}</ErrorMessage>
       </>
@@ -756,6 +825,7 @@ const KeywordTable: React.FC<KeywordTableProps> = ({ keywords, loading, error, o
   if (!keywords || keywords.length === 0) {
     return (
       <>
+        {demandLegendSection}
         {legendSection}
         <EmptyMessage>No keywords to display yet. Run an analysis to uncover new opportunities.</EmptyMessage>
       </>
@@ -828,6 +898,7 @@ const KeywordTable: React.FC<KeywordTableProps> = ({ keywords, loading, error, o
 
   return (
     <>
+      {demandLegendSection}
       {legendSection}
       <TableContainer>
         <Table>

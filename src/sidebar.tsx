@@ -5,6 +5,7 @@ import styled from 'styled-components';
 
 import Header from './components/Header';
 import MarketIntelligencePanel from './components/MarketIntelligencePanel';
+import { InfoIcon } from './components/Tooltip';
 // Try importing version from package.json (tsconfig has resolveJsonModule)
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
@@ -373,6 +374,29 @@ const ChipContainer = styled.div`
   margin-top: 0.5rem;
 `;
 
+const ShowMoreButton = styled.button`
+  background: transparent;
+  border: none;
+  color: #2563eb;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.25rem 0;
+  margin-top: 0.25rem;
+  text-decoration: underline;
+  
+  &:hover {
+    color: #1d4ed8;
+  }
+`;
+
+const SectionHeader = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+`;
+
 const App: React.FC = () => {
   const [keywords, setKeywords] = useState<KeywordData[]>([]);
   const [keywordsLoading, setKeywordsLoading] = useState<boolean>(true); 
@@ -403,6 +427,11 @@ const App: React.FC = () => {
   const [byokProvider, setByokProvider] = useState<'gemini'|'openai'>('gemini');
   const [byokKey, setByokKey] = useState('');
   const [previewRemaining, setPreviewRemaining] = useState<number>(3);
+  
+  // Show More States
+  const [showAllLongTail, setShowAllLongTail] = useState<boolean>(false);
+  const [showAllBullets, setShowAllBullets] = useState<boolean>(false);
+  const [showAllGaps, setShowAllGaps] = useState<boolean>(false);
   
   // Market Intelligence State
   const [marketIntelligence, setMarketIntelligence] = useState<MarketIntelligenceResult | null>(null);
@@ -894,42 +923,120 @@ const App: React.FC = () => {
               </OptList>
             </OptSection>
             <OptSection>
-              <strong>Long-Tail Suggestions:</strong> <Muted>({(optimization.longTail || []).length} found)</Muted>
+              <SectionHeader>
+                <strong>Long-Tail Suggestions:</strong>
+                <InfoIcon 
+                  tooltip={
+                    <div>
+                      <strong>Impact:</strong> Long-tail keywords typically convert 2.5x better than generic terms.<br/>
+                      <strong>Why:</strong> They capture specific buyer intent and face less competition.<br/>
+                      <strong>ROI:</strong> Average 20-30% higher conversion rate on Amazon listings.
+                    </div>
+                  }
+                  position="right"
+                />
+                <Muted>({(optimization.longTail || []).length} found)</Muted>
+              </SectionHeader>
               <OptList>
-                {(optimization.longTail || []).slice(0, 15).map((lt: LongTailSuggestion, i: number) => (
+                {(optimization.longTail || []).slice(0, showAllLongTail ? undefined : 5).map((lt: LongTailSuggestion, i: number) => (
                   <OptItem key={i}>
                     {lt.phrase} <Muted>(score: {(lt.score ?? 0).toFixed(2)})</Muted>
                     {lt.rationale && <Muted style={{display: 'block', fontSize: '0.65rem', marginTop: '2px', marginLeft: '0.5rem'}}> → {lt.rationale}</Muted>}
                   </OptItem>
                 ))}
               </OptList>
+              {(optimization.longTail || []).length > 5 && (
+                <ShowMoreButton onClick={() => setShowAllLongTail(!showAllLongTail)}>
+                  {showAllLongTail ? 'Show Less' : `Show ${(optimization.longTail || []).length - 5} More`}
+                </ShowMoreButton>
+              )}
             </OptSection>
             {optimization.meta && (
               <OptSection>
-                <strong>Meta Title:</strong>
+                <SectionHeader>
+                  <strong>Meta Title:</strong>
+                  <InfoIcon 
+                    tooltip={
+                      <div>
+                        <strong>Impact:</strong> Well-optimized meta titles can improve CTR by 15-40%.<br/>
+                        <strong>Best Practice:</strong> Keep under 60 characters for full visibility in search results.<br/>
+                        <strong>SEO Value:</strong> Primary ranking signal for search engines.
+                      </div>
+                    }
+                    position="right"
+                  />
+                </SectionHeader>
                 <MetaBlock>{optimization.meta.metaTitle}</MetaBlock>
-                <MetaDescriptionLabel>Meta Description:</MetaDescriptionLabel>
+                <SectionHeader style={{marginTop: '0.5rem'}}>
+                  <MetaDescriptionLabel>Meta Description:</MetaDescriptionLabel>
+                  <InfoIcon 
+                    tooltip={
+                      <div>
+                        <strong>Impact:</strong> Compelling descriptions increase click-through rates by 20-35%.<br/>
+                        <strong>Best Practice:</strong> 120-160 characters with clear value proposition.<br/>
+                        <strong>Sales Impact:</strong> Higher CTR = more traffic = more conversions.
+                      </div>
+                    }
+                    position="right"
+                  />
+                </SectionHeader>
                 <MetaBlock>{optimization.meta.metaDescription}</MetaBlock>
               </OptSection>
             )}
             {optimization.rewrittenBullets && optimization.rewrittenBullets.length > 0 && (
               <OptSection>
-                <strong>Rewritten Bullets:</strong>
+                <SectionHeader>
+                  <strong>Rewritten Bullets:</strong>
+                  <InfoIcon 
+                    tooltip={
+                      <div>
+                        <strong>Impact:</strong> Optimized bullets improve conversion by 12-18%.<br/>
+                        <strong>Why:</strong> Clear, benefit-focused bullets address customer concerns.<br/>
+                        <strong>Best Practice:</strong> Lead with benefits, include searchable keywords naturally.
+                      </div>
+                    }
+                    position="right"
+                  />
+                </SectionHeader>
                 <OptOrderedList>
-                  {optimization.rewrittenBullets.slice(0,5).map((b: RewrittenBullet, i: number) => (
+                  {optimization.rewrittenBullets.slice(0, showAllBullets ? undefined : 5).map((b: RewrittenBullet, i: number) => (
                     <OptItem as="li" key={i}>{b.rewritten}</OptItem>
                   ))}
                 </OptOrderedList>
+                {optimization.rewrittenBullets.length > 5 && (
+                  <ShowMoreButton onClick={() => setShowAllBullets(!showAllBullets)}>
+                    {showAllBullets ? 'Show Less' : `Show ${optimization.rewrittenBullets.length - 5} More`}
+                  </ShowMoreButton>
+                )}
               </OptSection>
             )}
-            {optimization.gaps && optimization.gaps.gaps && (
+            {optimization.gaps && optimization.gaps.gaps && optimization.gaps.gaps.length > 0 && (
               <OptSection>
-                <strong>Attribute Gaps ({optimization.gaps.classification}):</strong>
+                <SectionHeader>
+                  <strong>Attribute Gaps ({optimization.gaps.classification}):</strong>
+                  <InfoIcon 
+                    tooltip={
+                      <div>
+                        <strong>Impact:</strong> Complete listings get 25% more clicks on Amazon.<br/>
+                        <strong>Why:</strong> Missing attributes reduce search visibility and buyer confidence.<br/>
+                        <strong>Action:</strong> Fill gaps to appear in more filtered searches and comparisons.
+                      </div>
+                    }
+                    position="right"
+                  />
+                </SectionHeader>
                 <OptList>
-                  {optimization.gaps.gaps.slice(0,6).map((g: any, i: number) => (
-                    <OptItem key={i}>{g.key} - <Muted>{g.suggestion}</Muted></OptItem>
+                  {optimization.gaps.gaps.slice(0, showAllGaps ? undefined : 6).map((g: any, i: number) => (
+                    <OptItem key={i}>
+                      <strong>{g.key}</strong>{g.severity && <Badge style={{marginLeft: '4px', background: g.severity === 'high' ? '#ef4444' : g.severity === 'medium' ? '#f59e0b' : '#94a3b8'}}>{g.severity}</Badge>} - <Muted>{g.suggestion}</Muted>
+                    </OptItem>
                   ))}
                 </OptList>
+                {optimization.gaps.gaps.length > 6 && (
+                  <ShowMoreButton onClick={() => setShowAllGaps(!showAllGaps)}>
+                    {showAllGaps ? 'Show Less' : `Show ${optimization.gaps.gaps.length - 6} More`}
+                  </ShowMoreButton>
+                )}
               </OptSection>
             )}
             <InlineActions>
