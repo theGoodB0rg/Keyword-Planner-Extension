@@ -6,6 +6,7 @@ import styled from 'styled-components';
 import Header from './components/Header';
 import MarketIntelligencePanel from './components/MarketIntelligencePanel';
 import { InfoIcon } from './components/Tooltip';
+import ErrorDisplay from './components/ErrorDisplay';
 // Try importing version from package.json (tsconfig has resolveJsonModule)
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
@@ -18,6 +19,7 @@ import { AiTaskType } from './types/product';
 import { MarketIntelligenceResult, MarketIntelligenceEngine } from './utils/marketIntelligence';
 import { Marketplace } from './utils/signals';
 import { loadByokConfig, saveByokConfig } from './utils/storage';
+import { StructuredError, categorizeError, createStructuredError } from './utils/errorMessages';
 
 const Container = styled.div`
   font-family: Arial, sans-serif;
@@ -400,7 +402,7 @@ const SectionHeader = styled.div`
 const App: React.FC = () => {
   const [keywords, setKeywords] = useState<KeywordData[]>([]);
   const [keywordsLoading, setKeywordsLoading] = useState<boolean>(true); 
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<StructuredError | null>(null);
   const [offlineMode, setOfflineMode] = useState<boolean>(false);
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false); 
   const [copyButtonText, setCopyButtonText] = useState("Copy Keywords");
@@ -457,7 +459,7 @@ const App: React.FC = () => {
           dailyAllowance: info?.dailyAllowance
         });
         const quotaMessage = 'Daily limit reached. Upgrade or connect your own key to continue full AI analysis.';
-        setError(quotaMessage);
+        setError(createStructuredError('API_QUOTA_EXCEEDED'));
         setOptimizationError(quotaMessage);
         setIsAnalyzing(false);
         setKeywordsLoading(false);
@@ -473,7 +475,7 @@ const App: React.FC = () => {
         setError(null);
         setUnsupportedPage(null);
         if (message.keywords && message.keywords.length === 0 && !isAnalyzing) {
-          setError('Analysis complete, but no keywords were found for this page.');
+          setError(createStructuredError('NO_PRODUCT_DATA'));
         }
         setKeywordsLoading(false);
         setIsAnalyzing(false);
@@ -569,7 +571,7 @@ const App: React.FC = () => {
         });
       })();
     } catch (err) {
-      setError('Failed to initialize.'); setKeywordsLoading(false); setOptimizationLoading(false);
+      setError(categorizeError('Failed to initialize')); setKeywordsLoading(false); setOptimizationLoading(false);
     } finally {
         setKeywordsLoading(false); // Ensure loading is false after initial setup
     }
@@ -582,7 +584,7 @@ const App: React.FC = () => {
       const loadedKeywords = await loadKeywordsFromStorage();
       setKeywords(loadedKeywords);
     } catch (err) {
-      setError('Failed to load keywords.'); setKeywords([]); 
+      setError(categorizeError('Failed to load keywords')); setKeywords([]); 
     } finally {
       if (showLoadingIndicator || keywordsLoading) setKeywordsLoading(false); 
     }
@@ -596,26 +598,28 @@ const App: React.FC = () => {
     try {
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         if (chrome.runtime.lastError) {
-          setError(`Error accessing tabs: ${chrome.runtime.lastError.message}.`);
+          setError(categorizeError(`Error accessing tabs: ${chrome.runtime.lastError.message}`));
           setIsAnalyzing(false); setKeywordsLoading(false); setOptimizationLoading(false); return;
         }
         const tab = tabs[0];
         if (!tab?.id) {
-          setError('No active tab found.'); setIsAnalyzing(false); setKeywordsLoading(false); setOptimizationLoading(false); return;
+          setError(createStructuredError('NO_ACTIVE_TAB'));
+          setIsAnalyzing(false); setKeywordsLoading(false); setOptimizationLoading(false); return;
         }
         const url = tab.url || '';
         const restrictedProtocols = ['chrome:', 'chrome-extension:', 'edge:', 'about:', 'file:'];
         if (restrictedProtocols.some(protocol => url.startsWith(protocol)) || !url.startsWith('http')) {
-          setError('Cannot analyze this page type.'); setIsAnalyzing(false); setKeywordsLoading(false); setOptimizationLoading(false); return;
+          setError(createStructuredError('UNSUPPORTED_PAGE', `URL: ${url}`));
+          setIsAnalyzing(false); setKeywordsLoading(false); setOptimizationLoading(false); return;
         }
         chrome.tabs.sendMessage(tab.id, { action: 'manualAnalyze' }, (responseFromContentScript) => {
             const runtimeError = chrome.runtime.lastError;
             if (runtimeError) {
-              setError(`Error initiating analysis: ${runtimeError.message}`);
+              setError(createStructuredError('CONTENT_SCRIPT_ERROR', runtimeError.message));
               setIsAnalyzing(false); setKeywordsLoading(false); setOptimizationLoading(false); return;
             }
             if (!responseFromContentScript?.success) {
-              setError(responseFromContentScript?.error || 'Content script failed to initiate analysis.');
+              setError(categorizeError(responseFromContentScript?.error || 'Content script failed to initiate analysis.'));
               setIsAnalyzing(false); setKeywordsLoading(false); setOptimizationLoading(false);
             }
             // Now wait for 'keywordsUpdated' from background via runtime.onMessage listener
@@ -623,7 +627,7 @@ const App: React.FC = () => {
         );
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An unexpected error occurred.');
+      setError(categorizeError(err instanceof Error ? err.message : 'An unexpected error occurred'));
       setIsAnalyzing(false); setKeywordsLoading(false); setOptimizationLoading(false);
     }
   };
@@ -648,7 +652,8 @@ const App: React.FC = () => {
       setOfflineMode(newValue);
       await loadKeywords(); 
     } catch (err) {
-      setError('Failed to toggle offline mode.'); setKeywordsLoading(false); setOptimizationLoading(false);
+      setError(createStructuredError('STORAGE_ERROR', 'Failed to toggle offline mode'));
+      setKeywordsLoading(false); setOptimizationLoading(false);
       const currentMode = await isOfflineMode(); setOfflineMode(currentMode);
     }
   };
@@ -678,7 +683,7 @@ const App: React.FC = () => {
       .catch(err => {
         console.error('Popup: Failed to copy keywords to clipboard:', err);
         setCopyButtonText("Copy Failed");
-        setError("Failed to copy keywords. Check console for details.");
+        setError(categorizeError("Failed to copy keywords. Check console for details."));
         setTimeout(() => {
             setCopyButtonText("Copy Keywords");
             setError(null); // Clear error after a bit
@@ -811,7 +816,7 @@ const App: React.FC = () => {
   // Market Intelligence Handler
   const handleMarketIntelligenceAnalysis = async () => {
     if (!optimization?.product) {
-      setError('No product data available. Please analyze a product page first.');
+      setError(createStructuredError('NO_PRODUCT_DATA'));
       return;
     }
 
@@ -823,7 +828,7 @@ const App: React.FC = () => {
       setMarketIntelligence(result);
     } catch (error) {
       console.error('Market intelligence analysis failed:', error);
-      setError('Failed to analyze market data. Please try again.');
+      setError(categorizeError('Failed to analyze market data'));
     } finally {
       setMarketIntelligenceLoading(false);
     }
@@ -874,7 +879,21 @@ const App: React.FC = () => {
           {!byokEnabled && <TinyButton onClick={openByok}>Use your AI key</TinyButton>}
           {byokEnabled && <TinyButton onClick={disableByok}>Disable BYOK</TinyButton>}
         </InlineActions>
-        <KeywordTable keywords={keywords} loading={keywordsLoading} error={error} />
+        {error && (
+          <ErrorDisplay 
+            error={error} 
+            onRetry={handleAnalyzeCurrentPage}
+            onDismiss={() => setError(null)}
+            onCustomAction={(actionType) => {
+              if (actionType === 'offline') {
+                handleToggleOfflineMode();
+              } else if (actionType === 'byok') {
+                openByok();
+              }
+            }}
+          />
+        )}
+        <KeywordTable keywords={keywords} loading={keywordsLoading} error={error ? error.message : null} />
         {!optimization && optimizationLoading && (
           <OptimizationPanel>
             <PanelHeading>Product Optimization</PanelHeading>
