@@ -48,6 +48,24 @@ const Star = styled.span<{ $filled: boolean }>`
   font-size: 0.85em;
 `;
 
+const PercentageText = styled.span``;
+
+const TooltipHeader = styled.div`
+  margin-bottom: 0.25rem;
+`;
+
+const TooltipExplanation = styled.div`
+  font-size: 0.85em;
+  opacity: 0.9;
+`;
+
+const TooltipFooter = styled.div`
+  margin-top: 0.5rem;
+  font-size: 0.8em;
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+  padding-top: 0.4rem;
+`;
+
 const Percentage = styled.span`
   font-variant-numeric: tabular-nums;
   font-weight: 700;
@@ -57,7 +75,7 @@ const Icon = styled.span`
   font-size: 0.9em;
 `;
 
-export const ConfidenceBadge: React.FC<ConfidenceBadgeProps> = ({
+const ConfidenceBadge: React.FC<ConfidenceBadgeProps> = ({
   score,
   level,
   explanation,
@@ -81,20 +99,20 @@ export const ConfidenceBadge: React.FC<ConfidenceBadgeProps> = ({
   
   const tooltipContent = (
     <div>
-      <div style={{ marginBottom: '0.25rem' }}>
+      <TooltipHeader>
         <strong>{display.label}</strong> ({score}%)
-      </div>
+      </TooltipHeader>
       {explanation && (
-        <div style={{ fontSize: '0.85em', opacity: 0.9 }}>
+        <TooltipExplanation>
           {explanation}
-        </div>
+        </TooltipExplanation>
       )}
-      <div style={{ marginTop: '0.5rem', fontSize: '0.8em', borderTop: '1px solid rgba(255,255,255,0.2)', paddingTop: '0.4rem' }}>
+      <TooltipFooter>
         <div><strong>Score Ranges:</strong></div>
         <div>• 70-100%: High confidence ✓</div>
         <div>• 40-69%: Medium confidence ◐</div>
         <div>• 0-39%: Low confidence !</div>
-      </div>
+      </TooltipFooter>
     </div>
   );
   

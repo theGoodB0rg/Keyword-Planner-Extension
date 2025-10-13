@@ -181,6 +181,21 @@ const OptItem = styled.li`
 const Muted = styled.span`
   opacity: 0.6;
 `;
+const FlexRow = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+`;
+const FlexContent = styled.span`
+  flex: 1;
+`;
+const RationaleText = styled(Muted)`
+  display: block;
+  font-size: 0.65rem;
+  margin-top: 2px;
+  margin-left: 0.5rem;
+`;
 const MetaBlock = styled.div`
   font-size: 0.75rem;
   margin-top: 2px;
@@ -961,7 +976,7 @@ const App: React.FC = () => {
               <OptList>
                 {(optimization.longTail || []).slice(0, showAllLongTail ? undefined : 5).map((lt: LongTailSuggestion, i: number) => (
                   <OptItem key={i}>
-                    <div style={{display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap'}}>
+                    <FlexRow>
                       <span>{lt.phrase}</span>
                       <Muted>(score: {(lt.score ?? 0).toFixed(2)})</Muted>
                       {lt.confidence !== undefined && (
@@ -970,8 +985,8 @@ const App: React.FC = () => {
                           level={scoreToLevel(lt.confidence)}
                         />
                       )}
-                    </div>
-                    {lt.rationale && <Muted style={{display: 'block', fontSize: '0.65rem', marginTop: '2px', marginLeft: '0.5rem'}}> → {lt.rationale}</Muted>}
+                    </FlexRow>
+                    {lt.rationale && <RationaleText> → {lt.rationale}</RationaleText>}
                   </OptItem>
                 ))}
               </OptList>
@@ -1037,15 +1052,15 @@ const App: React.FC = () => {
                 <OptOrderedList>
                   {optimization.rewrittenBullets.slice(0, showAllBullets ? undefined : 5).map((b: RewrittenBullet, i: number) => (
                     <OptItem as="li" key={i}>
-                      <div style={{display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap'}}>
-                        <span style={{flex: '1'}}>{b.rewritten}</span>
+                      <FlexRow>
+                        <FlexContent>{b.rewritten}</FlexContent>
                         {b.confidence !== undefined && (
                           <ConfidenceBadge 
                             score={b.confidence} 
                             level={scoreToLevel(b.confidence)}
                           />
                         )}
-                      </div>
+                      </FlexRow>
                     </OptItem>
                   ))}
                 </OptOrderedList>
@@ -1074,7 +1089,7 @@ const App: React.FC = () => {
                 <OptList>
                   {optimization.gaps.gaps.slice(0, showAllGaps ? undefined : 6).map((g: any, i: number) => (
                     <OptItem key={i}>
-                      <div style={{display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap'}}>
+                      <FlexRow>
                         <div>
                           <strong>{g.key}</strong>{g.severity && <Badge style={{marginLeft: '4px', background: g.severity === 'high' ? '#ef4444' : g.severity === 'medium' ? '#f59e0b' : '#94a3b8'}}>{g.severity}</Badge>} - <Muted>{g.suggestion}</Muted>
                         </div>
@@ -1084,7 +1099,7 @@ const App: React.FC = () => {
                             level={scoreToLevel(g.confidence)}
                           />
                         )}
-                      </div>
+                      </FlexRow>
                     </OptItem>
                   ))}
                 </OptList>

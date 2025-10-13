@@ -244,6 +244,18 @@ const HeaderCell = styled.th`
   position: relative;
 `;
 
+const MarketplaceSelector = styled.span`
+  margin-left: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+`;
+
+const MarketplaceLabel = styled.label`
+  font-size: 0.75rem;
+  color: var(--c-text-dim, #64748b);
+`;
+
 const BodyRow = styled.tr<{ $active?: boolean }>`
   background: ${({ $active }) => ($active ? 'rgba(37, 99, 235, 0.08)' : 'transparent')};
   transition: background 0.2s ease, transform 0.2s ease;
@@ -878,8 +890,8 @@ const KeywordTable: React.FC<KeywordTableProps> = ({ keywords, loading, error, o
       {label}
       <InfoIcon type="button" onClick={() => toggleExplanation(key)} title={`Explain ${label}`}>?</InfoIcon>
       {key === 'keyword' && (
-        <span style={{ marginLeft: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
-          <label htmlFor="market-select" style={{ fontSize: '0.75rem', color: 'var(--c-text-dim, #64748b)' }}>Marketplace</label>
+        <MarketplaceSelector>
+          <MarketplaceLabel htmlFor="market-select">Marketplace</MarketplaceLabel>
           <select
             id="market-select"
             name="market-select"
@@ -891,7 +903,7 @@ const KeywordTable: React.FC<KeywordTableProps> = ({ keywords, loading, error, o
             <option value="amazon.co.uk">amazon.co.uk</option>
             <option value="amazon.ca">amazon.ca</option>
           </select>
-        </span>
+        </MarketplaceSelector>
       )}
     </HeaderCell>
   );
