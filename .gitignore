@@ -49,6 +49,12 @@ extension_creation_plan.md
 *.orig
 *.rej
 
+# Documentation (implementation notes, not user-facing)
+COMPREHENSIVE_FIX_PLAN.md
+QUICK_FIX_SUMMARY.md
+VISUAL_ROADMAP.md
+FIX_PROGRESS.md
+
 # Optional: lock files if not used (uncomment if you prefer)
 # package-lock.json
 # yarn.lock

@@ -27,6 +27,26 @@ const PanelTitle = styled.h3`
   color: var(--c-text, #0f172a);
 `;
 
+const WarningBadge = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+  border-radius: 6px;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+`;
+
+const WarningIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+  </svg>
+);
+
 const RefreshButton = styled.button`
   background: linear-gradient(135deg, var(--c-accent, #2563eb), #3b82f6);
   color: #ffffff;
@@ -214,6 +234,9 @@ const EmptyStateMessage = styled.div`
 `;
 
 const MarketIntelligencePanel: React.FC<MarketIntelligencePanelProps> = ({ data, loading, onRefresh }) => {
+  // Check if data is simulated
+  const isSimulated = data?.competitors?.some((c: any) => c._simulated) || false;
+  
   const renderTrendSymbol = (trend: TrendData['trendDirection']) => {
     if (trend === 'up') return '▲';
     if (trend === 'down') return '▼';
@@ -254,6 +277,11 @@ const MarketIntelligencePanel: React.FC<MarketIntelligencePanelProps> = ({ data,
     <Panel>
       <PanelHeader>
         <PanelTitle>Market Intelligence</PanelTitle>
+        {isSimulated && (
+          <WarningBadge title="This data is simulated for demonstration. See COMPREHENSIVE_FIX_PLAN.md for real API integration.">
+            <WarningIcon /> DEMO MODE
+          </WarningBadge>
+        )}
         <RefreshButton onClick={onRefresh} disabled={loading}>
           {loading ? 'Refreshing...' : 'Refresh'}
         </RefreshButton>

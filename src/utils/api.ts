@@ -44,6 +44,7 @@ const RETRY_CONFIG = {
 };
 
 const ECHO_PROXY_ERROR = "AI proxy running in echo mode (missing OpenAI API key).";
+const DEV_PROXY_TIMEOUT_MS = 12000;
 
 
 type ServiceType = 'openai' | 'gemini' | 'deepseek' | 'generic_openai_clone';
@@ -218,7 +219,7 @@ export async function analyzePageContent(pageContent: string): Promise<KeywordDa
     const url = 'http://localhost:8787/analyze';
     try {
       const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 1500);
+      const t = setTimeout(() => ctrl.abort(), DEV_PROXY_TIMEOUT_MS);
       const resp = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -267,7 +268,7 @@ export async function getAIAnalysis(prompt: string): Promise<string> {
   // Try local proxy first (fast timeout)
   try {
     const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 1500);
+    const t = setTimeout(() => ctrl.abort(), DEV_PROXY_TIMEOUT_MS);
     const resp = await fetch('http://localhost:8787/proxy/ai', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -437,3 +438,4 @@ export const __private = {
   resolveKeyFromEnv,
   resolveKeyFromByok
 };
+

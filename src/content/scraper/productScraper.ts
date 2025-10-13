@@ -126,6 +126,120 @@ function extractSpecs(): { key: string; value: string }[] {
   return specs.slice(0, 40);
 }
 
+function extractBrand(platform: ProductData['detectedPlatform'], specs: { key: string; value: string }[], title: string): string | null {
+  // Platform-specific brand selectors
+  const brandSelectors: Record<ProductData['detectedPlatform'], string[]> = {
+    amazon: [
+      '#bylineInfo', 
+      'a#brand', 
+      '#bylineInfo_feature_div a', 
+      '.a-row .a-size-small.a-color-secondary',
+      'a.a-link-normal[href*="/stores/"]'
+    ],
+    shopify: [
+      '.product__vendor',
+      '[itemprop="brand"]',
+      '.product-vendor',
+      '.product-single__vendor a'
+    ],
+    woocommerce: [
+      '.posted_in a',
+      '.product_meta .brand',
+      '[itemprop="brand"]'
+    ],
+    generic: [
+      '[itemprop="brand"]',
+      '.brand',
+      '.manufacturer',
+      '.product-brand'
+    ]
+  };
+
+  // Try direct brand selectors first
+  let brand = pickFirst(brandSelectors[platform]);
+  
+  // Clean up Amazon "Visit the X Store" or "Brand: X"
+  if (brand) {
+    brand = brand.replace(/^Visit the\s+/i, '').replace(/\s+Store$/i, '').replace(/^Brand:\s*/i, '').trim();
+  }
+
+  // Fallback 1: Check specs table for brand/manufacturer
+  if (!brand) {
+    const brandSpec = specs.find(s => /^(brand|manufacturer)$/i.test(s.key));
+    if (brandSpec?.value) {
+      brand = brandSpec.value;
+    }
+  }
+
+  // Fallback 2: Extract from title (first capitalized word, common brand patterns)
+  if (!brand && title) {
+    // Try to find brand from common patterns in title
+    const knownBrandPatterns = [
+      // Will match things like "Samsung Galaxy" -> "Samsung"
+      /^([A-Z][a-z]+(?:[A-Z][a-z]+)?)\s+/,
+      // Match all-caps brands like "SONY" or "HP"
+      /^([A-Z]{2,})\s+/
+    ];
+    
+    for (const pattern of knownBrandPatterns) {
+      const match = title.match(pattern);
+      if (match && match[1]) {
+        brand = match[1];
+        break;
+      }
+    }
+  }
+
+  return brand ? brand.trim() : null;
+}
+
+function extractAdditionalAttributes(specs: { key: string; value: string }[]): {
+  dimensions?: string;
+  weight?: string;
+  color?: string;
+  size?: string;
+  material?: string;
+  countryOfOrigin?: string;
+  asin?: string;
+  modelNumber?: string;
+} {
+  const attrs: any = {};
+  
+  // Extract from specs table
+  specs.forEach(spec => {
+    const key = spec.key.toLowerCase();
+    const value = spec.value.trim();
+    
+    if (/dimensions?|size\s*\(.*\)/.test(key)) {
+      attrs.dimensions = value;
+    } else if (/weight/.test(key)) {
+      attrs.weight = value;
+    } else if (/colou?r/.test(key)) {
+      attrs.color = value;
+    } else if (/^size$/.test(key)) {
+      attrs.size = value;
+    } else if (/material/.test(key)) {
+      attrs.material = value;
+    } else if (/country.*origin|made in/i.test(key)) {
+      attrs.countryOfOrigin = value;
+    } else if (/asin/.test(key)) {
+      attrs.asin = value;
+    } else if (/model|item model|part number/.test(key)) {
+      attrs.modelNumber = value;
+    }
+  });
+  
+  // Try to extract ASIN from URL or page (Amazon specific)
+  if (!attrs.asin) {
+    const asinMatch = window.location.pathname.match(/\/dp\/([A-Z0-9]{10})/);
+    if (asinMatch) {
+      attrs.asin = asinMatch[1];
+    }
+  }
+  
+  return attrs;
+}
+
 export function scrapeProduct(): ProductData | null {
   const title = pickFirst(['#productTitle', '#titleSection h1', "meta[name='title']", 'h1.product-single__title', 'h1.product__title', '.product_title', 'h1']);
   if (!title) return null; // Not a recognizable product page
@@ -138,10 +252,14 @@ export function scrapeProduct(): ProductData | null {
   const specs = extractSpecs();
   const reviews = { count: null as number | null, average: null as number | null };
   const categoryPath: string[] = [];
+  
+  // Extract brand and additional attributes
+  const brand = extractBrand(platform, specs, title);
+  const additionalAttrs = extractAdditionalAttributes(specs);
 
   const product: ProductData = {
     title,
-    brand: null,
+    brand,
     price,
     bullets,
     descriptionHTML,
@@ -151,12 +269,20 @@ export function scrapeProduct(): ProductData | null {
     specs,
     categoryPath,
     reviews,
-    sku: null,
+    sku: additionalAttrs.asin || null,
     availability: null,
     detectedPlatform: platform,
     url: window.location.href,
     timestamp: Date.now(),
-    raw: {}
+    raw: {
+      dimensions: additionalAttrs.dimensions,
+      weight: additionalAttrs.weight,
+      color: additionalAttrs.color,
+      size: additionalAttrs.size,
+      material: additionalAttrs.material,
+      countryOfOrigin: additionalAttrs.countryOfOrigin,
+      modelNumber: additionalAttrs.modelNumber
+    }
   };
   return product;
 }

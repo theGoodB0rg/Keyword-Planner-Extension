@@ -894,10 +894,13 @@ const App: React.FC = () => {
               </OptList>
             </OptSection>
             <OptSection>
-              <strong>Long-Tail Suggestions:</strong>
+              <strong>Long-Tail Suggestions:</strong> <Muted>({(optimization.longTail || []).length} found)</Muted>
               <OptList>
-                {(optimization.longTail || []).slice(0,6).map((lt: LongTailSuggestion, i: number) => (
-                  <OptItem key={i}>{lt.phrase} <Muted>({(lt.score ?? 0).toFixed(2)})</Muted></OptItem>
+                {(optimization.longTail || []).slice(0, 15).map((lt: LongTailSuggestion, i: number) => (
+                  <OptItem key={i}>
+                    {lt.phrase} <Muted>(score: {(lt.score ?? 0).toFixed(2)})</Muted>
+                    {lt.rationale && <Muted style={{display: 'block', fontSize: '0.65rem', marginTop: '2px', marginLeft: '0.5rem'}}> → {lt.rationale}</Muted>}
+                  </OptItem>
                 ))}
               </OptList>
             </OptSection>

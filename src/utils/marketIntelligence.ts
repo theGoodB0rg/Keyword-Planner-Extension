@@ -104,12 +104,18 @@ export class MarketIntelligenceEngine {
     }
 
     try {
-      // Simulate competitor data collection
+      // ⚠️ WARNING: Using simulated data - real API integration needed
       // In production, this would use SerpApi, Amazon API, or other scraping services
+      // See COMPREHENSIVE_FIX_PLAN.md for API integration options
       const competitors = await this.simulateCompetitorScraping(product, keywords);
       
-      // Add timestamp for caching
-      competitors.forEach(comp => (comp as any)._timestamp = Date.now());
+      // Mark as simulated data
+      competitors.forEach(comp => {
+        (comp as any)._timestamp = Date.now();
+        (comp as any)._simulated = true;
+        (comp as any)._warning = 'DEMO MODE: Simulated data for demonstration purposes';
+      });
+      
       this.competitorCache.set(cacheKey, competitors);
       
       return competitors;
