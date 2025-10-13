@@ -1,6 +1,7 @@
 import { AiTaskRequest, AiTaskResponse, AiTaskType, ProductData, LongTailSuggestion, MetaSuggestion, RewrittenBullet, GapResult } from '../types/product';
 import { getAIAnalysis } from '../utils/api';
 import { filterKeywords, isStopword, calculateKeywordRelevance } from '../utils/stopwords';
+import { calculateLongTailConfidence, calculateMetaConfidence, calculateBulletConfidence, calculateGapConfidence } from '../utils/confidence';
 
 // Simple in-memory cache (session)
 const cache = new Map<string, any>();
@@ -358,6 +359,20 @@ ONLY output valid JSON array format.`;
           fallbackUsed = true;
         }
         
+        // Calculate confidence for each suggestion
+        suggestions = suggestions.map(suggestion => {
+          const confidenceScore = calculateLongTailConfidence(
+            suggestion.phrase,
+            product.title,
+            product.categoryPath?.[0],
+            suggestion.score * 100
+          );
+          return {
+            ...suggestion,
+            confidence: confidenceScore.score
+          };
+        });
+        
         cache.set(cacheKey, suggestions);
         setPersistentCache(cacheKey, suggestions).catch(() => {});
         return { task: req.task, success: true, data: suggestions, elapsedMs: performance.now() - start, fallbackUsed };
@@ -424,8 +439,29 @@ Output ONLY valid JSON:
           },
           fallback
         );
-        const meta = isMetaSuggestion(parsedMeta) ? parsedMeta : fallback();
+        let meta = isMetaSuggestion(parsedMeta) ? parsedMeta : fallback();
         const fallbackUsed = usedFallback || !isMetaSuggestion(parsedMeta);
+        
+        // Calculate confidence for meta suggestions
+        const titleConfidence = calculateMetaConfidence(
+          meta.metaTitle,
+          product.title,
+          product.descriptionText,
+          !fallbackUsed
+        );
+        const descConfidence = calculateMetaConfidence(
+          meta.metaDescription,
+          product.title,
+          product.descriptionText,
+          !fallbackUsed
+        );
+        
+        // Use average confidence
+        meta = {
+          ...meta,
+          confidence: Math.round((titleConfidence.score + descConfidence.score) / 2)
+        };
+        
         cache.set(cacheKey, meta);
         setPersistentCache(cacheKey, meta).catch(() => {});
         return { task: req.task, success: true, data: meta, elapsedMs: performance.now() - start, fallbackUsed };
@@ -459,6 +495,20 @@ Output ONLY valid JSON:
           results = fallback();
           fallbackUsed = true;
         }
+        
+        // Calculate confidence for each rewritten bullet
+        results = results.map(bullet => {
+          const confidenceScore = calculateBulletConfidence(
+            bullet.original,
+            bullet.rewritten,
+            product.title + ' ' + product.categoryPath.join(' ')
+          );
+          return {
+            ...bullet,
+            confidence: confidenceScore.score
+          };
+        });
+        
         cache.set(cacheKey, results);
         setPersistentCache(cacheKey, results).catch(() => {});
         return { task: req.task, success: true, data: results, elapsedMs: performance.now() - start, fallbackUsed };
@@ -467,9 +517,26 @@ Output ONLY valid JSON:
         // Using heuristic only for initial phase
         const gaps = heuristicGaps(product);
         const validated = isGapResult(gaps) ? gaps : heuristicGaps(product);
-        cache.set(cacheKey, validated);
-        setPersistentCache(cacheKey, validated).catch(()=>{});
-        return { task: req.task, success: true, data: validated, elapsedMs: performance.now() - start, fallbackUsed: true };
+        
+        // Calculate confidence for each detected gap
+        const withConfidence: GapResult = {
+          ...validated,
+          gaps: validated.gaps.map(gap => {
+            const confidenceScore = calculateGapConfidence(
+              gap.key,
+              product,
+              gap.severity
+            );
+            return {
+              ...gap,
+              confidence: confidenceScore.score
+            };
+          })
+        };
+        
+        cache.set(cacheKey, withConfidence);
+        setPersistentCache(cacheKey, withConfidence).catch(()=>{});
+        return { task: req.task, success: true, data: withConfidence, elapsedMs: performance.now() - start, fallbackUsed: true };
       }
       default:
         return { task: req.task, success: false, data: null, elapsedMs: performance.now() - start, error: 'Unknown task' };

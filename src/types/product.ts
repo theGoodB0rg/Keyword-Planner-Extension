@@ -21,11 +21,11 @@ export interface ProductData {
   raw: Record<string, any>;
 }
 
-export interface LongTailSuggestion { phrase: string; rationale?: string; category?: string; score: number; }
-export interface RewrittenBullet { original: string; rewritten: string; length: number; diffHint?: string; }
-export interface MetaSuggestion { metaTitle: string; metaDescription: string; metaTitleLength: number; metaDescriptionLength: number; }
+export interface LongTailSuggestion { phrase: string; rationale?: string; category?: string; score: number; confidence?: number; }
+export interface RewrittenBullet { original: string; rewritten: string; length: number; diffHint?: string; confidence?: number; }
+export interface MetaSuggestion { metaTitle: string; metaDescription: string; metaTitleLength: number; metaDescriptionLength: number; confidence?: number; }
 
-export interface AttributeGap { key: string; severity: 'high' | 'medium' | 'low'; suggestion: string; }
+export interface AttributeGap { key: string; severity: 'high' | 'medium' | 'low'; suggestion: string; confidence?: number; }
 export interface GapResult { gaps: AttributeGap[]; gapScore: number; classification: 'none' | 'mild' | 'moderate' | 'severe'; }
 
 export type AiTaskType = 'generate.longTail' | 'rewrite.bullets' | 'generate.meta' | 'detect.gaps'; // initial subset

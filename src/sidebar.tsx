@@ -7,6 +7,8 @@ import Header from './components/Header';
 import MarketIntelligencePanel from './components/MarketIntelligencePanel';
 import { InfoIcon } from './components/Tooltip';
 import ErrorDisplay from './components/ErrorDisplay';
+import ConfidenceBadge from './components/ConfidenceBadge';
+import { scoreToLevel } from './utils/confidence';
 // Try importing version from package.json (tsconfig has resolveJsonModule)
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
@@ -959,7 +961,16 @@ const App: React.FC = () => {
               <OptList>
                 {(optimization.longTail || []).slice(0, showAllLongTail ? undefined : 5).map((lt: LongTailSuggestion, i: number) => (
                   <OptItem key={i}>
-                    {lt.phrase} <Muted>(score: {(lt.score ?? 0).toFixed(2)})</Muted>
+                    <div style={{display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap'}}>
+                      <span>{lt.phrase}</span>
+                      <Muted>(score: {(lt.score ?? 0).toFixed(2)})</Muted>
+                      {lt.confidence !== undefined && (
+                        <ConfidenceBadge 
+                          score={lt.confidence} 
+                          level={scoreToLevel(lt.confidence)}
+                        />
+                      )}
+                    </div>
                     {lt.rationale && <Muted style={{display: 'block', fontSize: '0.65rem', marginTop: '2px', marginLeft: '0.5rem'}}> → {lt.rationale}</Muted>}
                   </OptItem>
                 ))}
@@ -984,6 +995,12 @@ const App: React.FC = () => {
                     }
                     position="right"
                   />
+                  {optimization.meta.confidence !== undefined && (
+                    <ConfidenceBadge 
+                      score={optimization.meta.confidence} 
+                      level={scoreToLevel(optimization.meta.confidence)}
+                    />
+                  )}
                 </SectionHeader>
                 <MetaBlock>{optimization.meta.metaTitle}</MetaBlock>
                 <SectionHeader style={{marginTop: '0.5rem'}}>
@@ -1019,7 +1036,17 @@ const App: React.FC = () => {
                 </SectionHeader>
                 <OptOrderedList>
                   {optimization.rewrittenBullets.slice(0, showAllBullets ? undefined : 5).map((b: RewrittenBullet, i: number) => (
-                    <OptItem as="li" key={i}>{b.rewritten}</OptItem>
+                    <OptItem as="li" key={i}>
+                      <div style={{display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap'}}>
+                        <span style={{flex: '1'}}>{b.rewritten}</span>
+                        {b.confidence !== undefined && (
+                          <ConfidenceBadge 
+                            score={b.confidence} 
+                            level={scoreToLevel(b.confidence)}
+                          />
+                        )}
+                      </div>
+                    </OptItem>
                   ))}
                 </OptOrderedList>
                 {optimization.rewrittenBullets.length > 5 && (
@@ -1047,7 +1074,17 @@ const App: React.FC = () => {
                 <OptList>
                   {optimization.gaps.gaps.slice(0, showAllGaps ? undefined : 6).map((g: any, i: number) => (
                     <OptItem key={i}>
-                      <strong>{g.key}</strong>{g.severity && <Badge style={{marginLeft: '4px', background: g.severity === 'high' ? '#ef4444' : g.severity === 'medium' ? '#f59e0b' : '#94a3b8'}}>{g.severity}</Badge>} - <Muted>{g.suggestion}</Muted>
+                      <div style={{display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap'}}>
+                        <div>
+                          <strong>{g.key}</strong>{g.severity && <Badge style={{marginLeft: '4px', background: g.severity === 'high' ? '#ef4444' : g.severity === 'medium' ? '#f59e0b' : '#94a3b8'}}>{g.severity}</Badge>} - <Muted>{g.suggestion}</Muted>
+                        </div>
+                        {g.confidence !== undefined && (
+                          <ConfidenceBadge 
+                            score={g.confidence} 
+                            level={scoreToLevel(g.confidence)}
+                          />
+                        )}
+                      </div>
                     </OptItem>
                   ))}
                 </OptList>
