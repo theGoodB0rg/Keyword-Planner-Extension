@@ -11,6 +11,7 @@ import {
   logExtractionFailure, 
   logNavigation 
 } from './utils/telemetry';
+import { shouldAnalyzePageSemantic } from './content/scraper/semanticDetection';
 
 // Ensure we only initialize once per page
 let initialized = false;
@@ -82,18 +83,9 @@ function initialize() {
 
 /**
  * Determine if the current page should be analyzed
+ * Phase 1: Now uses semantic-first detection instead of rigid heuristics
  */
 function shouldAnalyzePage(): boolean {
-  // Skip pages with little content
-  const contentLength = document.body.innerText.length;
-  if (contentLength < 1000) {
-    logExtractionFailure('unknown', 'Page rejected: content length < 1000 chars', {
-      contentLength,
-      url: window.location.href
-    }).catch(console.error);
-    return false;
-  }
-  
   // Skip login pages, error pages, etc.
   const skipPatterns = [
     /\/login\/?$/i,
@@ -112,20 +104,26 @@ function shouldAnalyzePage(): boolean {
     return false;
   }
   
-  // Always analyze product pages
+  // Use semantic detection (Phase 1)
+  const semanticCheck = shouldAnalyzePageSemantic();
+  
+  if (semanticCheck.shouldAnalyze) {
+    // Log success with reason
+    console.log(`AI Keyword Planner: Page accepted - ${semanticCheck.reason} (confidence: ${semanticCheck.confidence})`);
+    return true;
+  }
+  
+  // Fallback: Check old isProductPage logic for backward compatibility
   if (isProductPage()) {
+    console.log('AI Keyword Planner: Page accepted via legacy detection');
     return true;
   }
   
-  // Check for content-rich pages 
-  const paragraphs = document.querySelectorAll('p');
-  if (paragraphs.length >= 5) {
-    return true;
-  }
-  
-  logExtractionFailure('unknown', 'Page rejected: not product page and < 5 paragraphs', {
-    paragraphCount: paragraphs.length,
-    url: window.location.href
+  // Log rejection
+  logExtractionFailure('unknown', `Page rejected: ${semanticCheck.reason}`, {
+    confidence: semanticCheck.confidence,
+    url: window.location.href,
+    pathname: window.location.pathname
   }).catch(console.error);
   
   return false;

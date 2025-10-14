@@ -15,7 +15,7 @@ export interface ProductData {
   reviews: { count: number | null; average: number | null };
   sku: string | null;
   availability: string | null;
-  detectedPlatform: 'amazon' | 'shopify' | 'woocommerce' | 'generic';
+  detectedPlatform: 'amazon' | 'etsy' | 'walmart' | 'ebay' | 'shopify' | 'woocommerce' | 'generic';
   url: string;
   timestamp: number;
   raw: Record<string, any>;

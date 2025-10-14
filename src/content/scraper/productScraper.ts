@@ -1,38 +1,62 @@
 import { ProductData } from '../../types/product';
 import { logPlatformDetection } from '../../utils/telemetry';
+import { detectPlatformSemantic, extractSemanticData } from './semanticDetection';
 
-// Basic platform detection (extend later)
+/**
+ * Enhanced platform detection using semantic detection module
+ * Phase 1: Now uses semantic signals for better accuracy
+ */
 function detectPlatform(): ProductData['detectedPlatform'] {
-  const host = window.location.host.toLowerCase();
-  const signals: Record<string, boolean> = {
-    'hostname_amazon': host.includes('amazon.'),
-    'hostname_etsy': host.includes('etsy.'),
-    'hostname_walmart': host.includes('walmart.'),
-    'hostname_ebay': host.includes('ebay.'),
-    'window_shopify': !!(window as any).Shopify,
-    'meta_shopify': !!document.querySelector("meta[name='shopify-digital-wallet']"),
-    'class_woocommerce': !!document.querySelector('[class*="woocommerce"]'),
-    'body_woocommerce': !!document.body.classList.toString().includes('woocommerce')
-  };
+  // Use the new semantic detection
+  const result = detectPlatformSemantic();
+  return result.platform;
+}
+
+/**
+ * Try to get product data from semantic sources first
+ * Falls back to DOM scraping if semantic data is insufficient
+ */
+function getSemanticProductData(): Partial<ProductData> | null {
+  const semanticData = extractSemanticData();
+  if (!semanticData) return null;
   
-  let platform: ProductData['detectedPlatform'] = 'generic';
-  let confidence = 0.5; // Default confidence for generic
+  // Map semantic data to ProductData format
+  const mapped: Partial<ProductData> = {};
   
-  if (signals.hostname_amazon) {
-    platform = 'amazon';
-    confidence = 1.0;
-  } else if (signals.window_shopify || signals.meta_shopify) {
-    platform = 'shopify';
-    confidence = 0.9;
-  } else if (signals.class_woocommerce || signals.body_woocommerce) {
-    platform = 'woocommerce';
-    confidence = 0.85;
+  if (semanticData.name) mapped.title = semanticData.name;
+  if (semanticData.brand) mapped.brand = semanticData.brand;
+  if (semanticData.sku) mapped.sku = semanticData.sku;
+  
+  if (semanticData.price !== undefined || semanticData.priceCurrency) {
+    mapped.price = {
+      value: semanticData.price || null,
+      currency: semanticData.priceCurrency || null,
+      raw: semanticData.price ? `${semanticData.priceCurrency || ''}${semanticData.price}` : null
+    };
   }
   
-  // Log the detection result
-  logPlatformDetection(platform, confidence, signals).catch(console.error);
+  if (semanticData.description) {
+    mapped.descriptionText = semanticData.description;
+    mapped.descriptionHTML = semanticData.description; // Will be enhanced by DOM scraper if needed
+  }
   
-  return platform;
+  if (semanticData.image) {
+    const images = Array.isArray(semanticData.image) ? semanticData.image : [semanticData.image];
+    mapped.images = images.map(src => ({ src, alt: semanticData.name || null }));
+  }
+  
+  if (semanticData.availability) {
+    mapped.availability = semanticData.availability;
+  }
+  
+  if (semanticData.aggregateRating) {
+    mapped.reviews = {
+      count: semanticData.aggregateRating.reviewCount || null,
+      average: semanticData.aggregateRating.ratingValue || null
+    };
+  }
+  
+  return Object.keys(mapped).length > 0 ? mapped : null;
 }
 
 function text(el: Element | null): string {
@@ -162,6 +186,22 @@ function extractBrand(platform: ProductData['detectedPlatform'], specs: { key: s
       '.a-row .a-size-small.a-color-secondary',
       'a.a-link-normal[href*="/stores/"]'
     ],
+    etsy: [
+      '.wt-text-body-01.wt-mr-xs-1',
+      'a[href*="/shop/"]',
+      '.shop-name',
+      '[data-shop-name]'
+    ],
+    walmart: [
+      '[itemprop="brand"]',
+      '.prod-brandName',
+      '.brand-name'
+    ],
+    ebay: [
+      '.ux-labels-values__values-content a',
+      '[itemprop="brand"]',
+      'span:-soup-contains("Brand")'
+    ],
     shopify: [
       '.product__vendor',
       '[itemprop="brand"]',
@@ -267,36 +307,55 @@ function extractAdditionalAttributes(specs: { key: string; value: string }[]): {
 }
 
 export function scrapeProduct(): ProductData | null {
-  const title = pickFirst(['#productTitle', '#titleSection h1', "meta[name='title']", 'h1.product-single__title', 'h1.product__title', '.product_title', 'h1']);
-  if (!title) return null; // Not a recognizable product page
   const platform = detectPlatform();
-  const price = extractPriceRaw();
+  
+  // Phase 1: Try semantic data first (JSON-LD, microdata, OpenGraph)
+  const semanticData = getSemanticProductData();
+  
+  // DOM extraction (fallback or enhancement)
+  const domTitle = pickFirst(['#productTitle', '#titleSection h1', "meta[name='title']", 'h1.product-single__title', 'h1.product__title', '.product_title', 'h1']);
+  const domPrice = extractPriceRaw();
   const bullets = extractBullets();
   const { html: descriptionHTML, text: descriptionText } = extractDescription();
-  const images = extractImages();
+  const domImages = extractImages();
   const variants = extractVariants();
   const specs = extractSpecs();
-  const reviews = { count: null as number | null, average: null as number | null };
+  
+  // Merge semantic and DOM data (semantic takes priority)
+  const title = semanticData?.title || domTitle;
+  if (!title) return null; // Must have at least a title
+  
+  const price = semanticData?.price || domPrice;
+  const images = (semanticData?.images && semanticData.images.length > 0) ? semanticData.images : domImages;
+  const reviews = semanticData?.reviews || { count: null as number | null, average: null as number | null };
   const categoryPath: string[] = [];
   
-  // Extract brand and additional attributes
-  const brand = extractBrand(platform, specs, title);
+  // Brand extraction
+  const brand = semanticData?.brand || extractBrand(platform, specs, title);
+  
+  // Additional attributes
   const additionalAttrs = extractAdditionalAttributes(specs);
+  const sku = semanticData?.sku || additionalAttrs.asin || null;
+  const availability = semanticData?.availability || null;
+  
+  // Merge descriptions
+  const finalDescriptionHTML = semanticData?.descriptionHTML || descriptionHTML;
+  const finalDescriptionText = semanticData?.descriptionText || descriptionText;
 
   const product: ProductData = {
     title,
     brand,
     price,
     bullets,
-    descriptionHTML,
-    descriptionText,
+    descriptionHTML: finalDescriptionHTML,
+    descriptionText: finalDescriptionText,
     images,
     variants,
     specs,
     categoryPath,
     reviews,
-    sku: additionalAttrs.asin || null,
-    availability: null,
+    sku,
+    availability,
     detectedPlatform: platform,
     url: window.location.href,
     timestamp: Date.now(),
@@ -307,7 +366,8 @@ export function scrapeProduct(): ProductData | null {
       size: additionalAttrs.size,
       material: additionalAttrs.material,
       countryOfOrigin: additionalAttrs.countryOfOrigin,
-      modelNumber: additionalAttrs.modelNumber
+      modelNumber: additionalAttrs.modelNumber,
+      semanticSource: semanticData ? 'json-ld|microdata|opengraph' : 'dom-only'
     }
   };
   return product;
