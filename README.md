@@ -84,6 +84,23 @@ This will compile the extension and watch for changes.
 
 The extension is built with offline capabilities by default. Toggle "Offline Mode" in the popup to test functionality without external API calls.
 
+### Market intelligence backend
+- The Market Intelligence panel calls the proxy service in `token-proxy-service`. Start it locally with:
+
+  ```bash
+  cd token-proxy-service
+  npm install
+  npm run dev
+  ```
+
+- During development the bundle falls back to `http://localhost:8787`. For packaged builds set `MARKET_PROXY_BASE` when running `npm run build`, for example:
+
+  ```bash
+  MARKET_PROXY_BASE=https://your-proxy.example.com npm run build
+  ```
+
+- The proxy includes optional shared-secret protection via `EXT_SHARED_SECRET` in `token-proxy-service/.env`. If you enable it, provide the same value as an `X-EXT-SECRET` header from a secure extension configuration path.
+
 ### Provider keys & BYOK
 - For development you can rely on the built-in preview allowance (three AI runs) or toggle "Use your AI key" in the sidebar to persist a BYOK token in local storage.
 - Optional: set environment variables (e.g. `GEMINI_API_KEY`, `OPENAI_API_KEY`) before running `npm run dev` or `npm run build`. They are consumed at build time and skipped if not defined.

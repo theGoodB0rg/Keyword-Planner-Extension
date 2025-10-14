@@ -1,4 +1,5 @@
 const path = require('path');
+const webpack = require('webpack');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const CopyWebpackPlugin = require('copy-webpack-plugin');
 
@@ -35,6 +36,9 @@ module.exports = {
       template: './public/sidebar.html',
       filename: 'sidebar.html',
       chunks: ['sidebar']
+    }),
+    new webpack.DefinePlugin({
+      'process.env.MARKET_PROXY_BASE': JSON.stringify(process.env.MARKET_PROXY_BASE || ''),
     }),
     new CopyWebpackPlugin({
       patterns: [

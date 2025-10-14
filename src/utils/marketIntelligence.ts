@@ -54,17 +54,27 @@ export interface MarketIntelligenceResult {
   };
 }
 
-const MARKET_PROXY_BASE = (typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production')
-  ? 'http://localhost:8787'
-  : 'https://api.yourdomain.com';
+const ENV_PROXY_BASE = (typeof process !== 'undefined' && process.env && typeof process.env.MARKET_PROXY_BASE === 'string'
+  && process.env.MARKET_PROXY_BASE.trim().length > 0)
+  ? process.env.MARKET_PROXY_BASE.trim()
+  : null;
+const NODE_ENV = (typeof process !== 'undefined' && process.env && typeof process.env.NODE_ENV === 'string')
+  ? process.env.NODE_ENV
+  : 'production';
+const DEFAULT_DEV_PROXY_BASE = 'http://localhost:8787';
+const DEFAULT_PROD_PROXY_BASE = 'https://api.yourdomain.com';
+
+const MARKET_PROXY_BASE = ENV_PROXY_BASE
+  || (NODE_ENV === 'development' ? DEFAULT_DEV_PROXY_BASE : DEFAULT_PROD_PROXY_BASE);
 const TRENDS_ENDPOINT = `${MARKET_PROXY_BASE}/proxy/trends`;
 const TRENDS_TIMEOUT = 10000;
 
 export class MarketIntelligenceEngine {
   private static instance: MarketIntelligenceEngine;
-  private competitorCache = new Map<string, { data: CompetitorData[]; ts: number }>();
-  private trendCache = new Map<string, { data: TrendData; ts: number }>();
+  private competitorCache = new Map<string, { data: CompetitorData[]; ts: number; fallback: boolean }>();
+  private trendCache = new Map<string, { data: TrendData; ts: number; fallback: boolean }>();
   private cacheExpiry = 1000 * 60 * 30; // 30 minutes
+  private fallbackRetry = 1000 * 60 * 2; // retry live fetch after 2 minutes when using fallback data
 
   static getInstance(): MarketIntelligenceEngine {
     if (!MarketIntelligenceEngine.instance) {
@@ -104,8 +114,11 @@ export class MarketIntelligenceEngine {
   private async getCompetitorAnalysis(product: ProductData, keywords: string[]): Promise<CompetitorData[]> {
     const cacheKey = `${product.url}|${product.sku || ''}|${keywords.slice(0, 5).join(',')}`;
     const cached = this.competitorCache.get(cacheKey);
-    if (cached && Date.now() - cached.ts < this.cacheExpiry) {
-      return cached.data;
+    if (cached) {
+      const ttl = cached.fallback ? this.fallbackRetry : this.cacheExpiry;
+      if (Date.now() - cached.ts < ttl) {
+        return cached.data;
+      }
     }
 
     try {
@@ -121,7 +134,7 @@ export class MarketIntelligenceEngine {
             comp.lastUpdated = timestamp;
             (comp as any)._timestamp = timestamp;
           });
-          this.competitorCache.set(cacheKey, { data: normalized, ts: timestamp });
+          this.competitorCache.set(cacheKey, { data: normalized, ts: timestamp, fallback: false });
           return normalized;
         }
       }
@@ -138,7 +151,7 @@ export class MarketIntelligenceEngine {
         (comp as any)._timestamp = timestamp;
         (comp as any)._simulated = true;
       });
-      this.competitorCache.set(cacheKey, { data: simulated, ts: timestamp });
+      this.competitorCache.set(cacheKey, { data: simulated, ts: timestamp, fallback: true });
       return simulated;
     } catch (error) {
       console.warn('Competitor analysis failed, using fallback:', error);
@@ -150,7 +163,7 @@ export class MarketIntelligenceEngine {
         (comp as any)._timestamp = timestamp;
         (comp as any)._simulated = true;
       });
-      this.competitorCache.set(cacheKey, { data: fallback, ts: timestamp });
+      this.competitorCache.set(cacheKey, { data: fallback, ts: timestamp, fallback: true });
       return fallback;
     }
   }
@@ -170,15 +183,18 @@ export class MarketIntelligenceEngine {
 
     for (const keyword of selected) {
       const cacheEntry = this.trendCache.get(keyword);
-      if (cacheEntry && Date.now() - cacheEntry.ts < this.cacheExpiry) {
-        results.push(cacheEntry.data);
-        continue;
+      if (cacheEntry) {
+        const ttl = cacheEntry.fallback ? this.fallbackRetry : this.cacheExpiry;
+        if (Date.now() - cacheEntry.ts < ttl) {
+          results.push(cacheEntry.data);
+          continue;
+        }
       }
 
       try {
         const trend = await this.fetchTrendFromProxy(keyword);
         if (trend) {
-          this.trendCache.set(keyword, { data: trend, ts: Date.now() });
+          this.trendCache.set(keyword, { data: trend, ts: Date.now(), fallback: false });
           results.push(trend);
           continue;
         }
@@ -187,7 +203,7 @@ export class MarketIntelligenceEngine {
       }
 
       const fallback = await this.simulateTrendAnalysis(keyword);
-      this.trendCache.set(keyword, { data: fallback, ts: Date.now() });
+      this.trendCache.set(keyword, { data: fallback, ts: Date.now(), fallback: true });
       results.push(fallback);
     }
 
