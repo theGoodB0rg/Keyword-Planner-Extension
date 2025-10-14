@@ -197,8 +197,9 @@ function handleSPANavigation() {
 
 /**
  * Phase 2: Analyze the current page (can be called multiple times)
+ * Phase 3: Now async to support pipeline extraction
  */
-function analyzePage() {
+async function analyzePage() {
   const currentUrl = window.location.href;
 
   // Skip if already analyzing
@@ -221,8 +222,8 @@ function analyzePage() {
       // Extract the page content
       const pageData = extractPageContent();
       
-      // Send the extracted data to the background script
-      sendToBackground(pageData);
+      // Send the extracted data to the background script (now async)
+      await sendToBackground(pageData);
       
       // Set up the UI button
       setupUI();
@@ -310,12 +311,13 @@ function shouldAnalyzePage(): boolean {
 
 /**
  * Send data to the background script
+ * Phase 3: Now async to support pipeline extraction
  */
-function sendToBackground(pageData: PageMetadata) {
-  let productData: ReturnType<typeof scrapeProduct> = null;
+async function sendToBackground(pageData: PageMetadata) {
+  let productData: Awaited<ReturnType<typeof scrapeProduct>> = null;
   try {
     if (isProductPage()) {
-      productData = scrapeProduct();
+      productData = await scrapeProduct();
       
       // Log extraction success/failure
       if (productData) {

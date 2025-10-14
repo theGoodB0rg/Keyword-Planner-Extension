@@ -1,6 +1,9 @@
 import { ProductData } from '../../types/product';
 import { logPlatformDetection } from '../../utils/telemetry';
 import { detectPlatformSemantic, extractSemanticData } from './semanticDetection';
+import { ExtractionPipeline } from './extractionPipeline';
+import { JsonLdExtractor, MicrodataExtractor, OpenGraphExtractor } from './extractors/structuredDataExtractor';
+import { HeuristicExtractor } from './extractors/heuristicExtractor';
 
 /**
  * Enhanced platform detection using semantic detection module
@@ -306,46 +309,78 @@ function extractAdditionalAttributes(specs: { key: string; value: string }[]): {
   return attrs;
 }
 
-export function scrapeProduct(): ProductData | null {
+/**
+ * Create and configure the extraction pipeline
+ * Phase 3: Modular extraction architecture
+ */
+let _pipelineInstance: ExtractionPipeline | null = null;
+
+function getExtractionPipeline(): ExtractionPipeline {
+  if (!_pipelineInstance) {
+    _pipelineInstance = new ExtractionPipeline({
+      minConfidence: 0.3, // Accept medium-low confidence results
+      maxExtractors: 0, // Run all extractors
+      stopOnSuccess: false, // Run all to get best data
+      debug: false, // Set to true for debugging
+      extractorTimeout: 5000 // 5 second timeout per extractor
+    });
+    
+    // Register extractors in priority order (highest first)
+    _pipelineInstance.registerExtractor(new JsonLdExtractor());
+    _pipelineInstance.registerExtractor(new MicrodataExtractor());
+    _pipelineInstance.registerExtractor(new OpenGraphExtractor());
+    _pipelineInstance.registerExtractor(new HeuristicExtractor());
+  }
+  
+  return _pipelineInstance;
+}
+
+export async function scrapeProduct(): Promise<ProductData | null> {
   const platform = detectPlatform();
   
-  // Phase 1: Try semantic data first (JSON-LD, microdata, OpenGraph)
-  const semanticData = getSemanticProductData();
+  // Phase 3: Use extraction pipeline for modular, extensible extraction
+  const pipeline = getExtractionPipeline();
+  const pipelineResult = await pipeline.extract(document, platform);
   
-  // DOM extraction (fallback or enhancement)
-  const domTitle = pickFirst(['#productTitle', '#titleSection h1', "meta[name='title']", 'h1.product-single__title', 'h1.product__title', '.product_title', 'h1']);
-  const domPrice = extractPriceRaw();
+  // Extract additional DOM-specific data not covered by extractors
   const bullets = extractBullets();
   const { html: descriptionHTML, text: descriptionText } = extractDescription();
-  const domImages = extractImages();
   const variants = extractVariants();
   const specs = extractSpecs();
-  
-  // Merge semantic and DOM data (semantic takes priority)
-  const title = semanticData?.title || domTitle;
-  if (!title) return null; // Must have at least a title
-  
-  const price = semanticData?.price || domPrice;
-  const images = (semanticData?.images && semanticData.images.length > 0) ? semanticData.images : domImages;
-  const reviews = semanticData?.reviews || { count: null as number | null, average: null as number | null };
   const categoryPath: string[] = [];
   
-  // Brand extraction
-  const brand = semanticData?.brand || extractBrand(platform, specs, title);
+  // Get data from pipeline (already merged from all extractors)
+  const pipelineData = pipelineResult.data;
   
-  // Additional attributes
+  // Must have at least a title
+  if (!pipelineData.title) return null;
+  
+  // Enhance with platform-specific brand extraction if not found
+  let brand = pipelineData.brand;
+  if (!brand && pipelineData.title) {
+    brand = extractBrand(platform, specs, pipelineData.title);
+  }
+  
+  // Additional attributes from specs
   const additionalAttrs = extractAdditionalAttributes(specs);
-  const sku = semanticData?.sku || additionalAttrs.asin || null;
-  const availability = semanticData?.availability || null;
   
-  // Merge descriptions
-  const finalDescriptionHTML = semanticData?.descriptionHTML || descriptionHTML;
-  const finalDescriptionText = semanticData?.descriptionText || descriptionText;
-
+  // Merge SKU (pipeline SKU or ASIN from URL)
+  const sku = pipelineData.sku || additionalAttrs.asin || null;
+  
+  // Merge descriptions (DOM descriptions if pipeline didn't extract)
+  const finalDescriptionHTML = pipelineData.descriptionHTML || descriptionHTML;
+  const finalDescriptionText = pipelineData.descriptionText || descriptionText;
+  
+  // Merge images (use pipeline images if available)
+  const images = (pipelineData.images && pipelineData.images.length > 0) 
+    ? pipelineData.images 
+    : extractImages();
+  
+  // Build final product data
   const product: ProductData = {
-    title,
-    brand,
-    price,
+    title: pipelineData.title,
+    brand: brand || null,
+    price: pipelineData.price || { value: null, currency: null, raw: null },
     bullets,
     descriptionHTML: finalDescriptionHTML,
     descriptionText: finalDescriptionText,
@@ -353,11 +388,11 @@ export function scrapeProduct(): ProductData | null {
     variants,
     specs,
     categoryPath,
-    reviews,
+    reviews: pipelineData.reviews || { count: null, average: null },
     sku,
-    availability,
+    availability: pipelineData.availability || null,
     detectedPlatform: platform,
-    url: window.location.href,
+    url: pipelineData.url || window.location.href,
     timestamp: Date.now(),
     raw: {
       dimensions: additionalAttrs.dimensions,
@@ -367,8 +402,17 @@ export function scrapeProduct(): ProductData | null {
       material: additionalAttrs.material,
       countryOfOrigin: additionalAttrs.countryOfOrigin,
       modelNumber: additionalAttrs.modelNumber,
-      semanticSource: semanticData ? 'json-ld|microdata|opengraph' : 'dom-only'
+      // Phase 3: Pipeline metadata
+      pipelineMetadata: {
+        extractorsRun: pipelineResult.extractorsRun,
+        extractorsContributed: pipelineResult.extractorsContributed,
+        overallConfidence: pipelineResult.overallConfidence,
+        fieldSources: pipelineResult.fieldSources,
+        fieldConfidence: pipelineResult.fieldConfidence,
+        extractionTime: pipelineResult.extractionTime
+      }
     }
   };
+  
   return product;
 }
