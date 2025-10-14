@@ -1,12 +1,38 @@
 import { ProductData } from '../../types/product';
+import { logPlatformDetection } from '../../utils/telemetry';
 
 // Basic platform detection (extend later)
 function detectPlatform(): ProductData['detectedPlatform'] {
   const host = window.location.host.toLowerCase();
-  if (host.includes('amazon.')) return 'amazon';
-  if ((window as any).Shopify || document.querySelector("meta[name='shopify-digital-wallet']")) return 'shopify';
-  if (document.querySelector('[class*="woocommerce"]')) return 'woocommerce';
-  return 'generic';
+  const signals: Record<string, boolean> = {
+    'hostname_amazon': host.includes('amazon.'),
+    'hostname_etsy': host.includes('etsy.'),
+    'hostname_walmart': host.includes('walmart.'),
+    'hostname_ebay': host.includes('ebay.'),
+    'window_shopify': !!(window as any).Shopify,
+    'meta_shopify': !!document.querySelector("meta[name='shopify-digital-wallet']"),
+    'class_woocommerce': !!document.querySelector('[class*="woocommerce"]'),
+    'body_woocommerce': !!document.body.classList.toString().includes('woocommerce')
+  };
+  
+  let platform: ProductData['detectedPlatform'] = 'generic';
+  let confidence = 0.5; // Default confidence for generic
+  
+  if (signals.hostname_amazon) {
+    platform = 'amazon';
+    confidence = 1.0;
+  } else if (signals.window_shopify || signals.meta_shopify) {
+    platform = 'shopify';
+    confidence = 0.9;
+  } else if (signals.class_woocommerce || signals.body_woocommerce) {
+    platform = 'woocommerce';
+    confidence = 0.85;
+  }
+  
+  // Log the detection result
+  logPlatformDetection(platform, confidence, signals).catch(console.error);
+  
+  return platform;
 }
 
 function text(el: Element | null): string {

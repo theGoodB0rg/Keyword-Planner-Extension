@@ -5,6 +5,12 @@
 import { extractPageContent, isProductPage } from './utils/scraper';
 import { PageMetadata } from './utils/types';
 import { scrapeProduct } from './content/scraper/productScraper';
+import { 
+  logPlatformDetection, 
+  logExtraction, 
+  logExtractionFailure, 
+  logNavigation 
+} from './utils/telemetry';
 
 // Ensure we only initialize once per page
 let initialized = false;
@@ -30,6 +36,13 @@ function initialize() {
     if (initialized) return;
     initialized = true;
     console.log('AI Keyword Planner: Content script initialized');
+
+    // Log initial page load
+    logNavigation('initial', {
+      url: window.location.href,
+      pathname: window.location.pathname,
+      hostname: window.location.hostname
+    }).catch(console.error);
 
     // Check if this page is a product or content-rich page worth analyzing
     if (shouldAnalyzePage()) {
@@ -74,6 +87,10 @@ function shouldAnalyzePage(): boolean {
   // Skip pages with little content
   const contentLength = document.body.innerText.length;
   if (contentLength < 1000) {
+    logExtractionFailure('unknown', 'Page rejected: content length < 1000 chars', {
+      contentLength,
+      url: window.location.href
+    }).catch(console.error);
     return false;
   }
   
@@ -88,6 +105,10 @@ function shouldAnalyzePage(): boolean {
   ];
   
   if (skipPatterns.some(pattern => pattern.test(window.location.pathname))) {
+    logExtractionFailure('unknown', 'Page rejected: matches skip pattern', {
+      pathname: window.location.pathname,
+      url: window.location.href
+    }).catch(console.error);
     return false;
   }
   
@@ -102,6 +123,11 @@ function shouldAnalyzePage(): boolean {
     return true;
   }
   
+  logExtractionFailure('unknown', 'Page rejected: not product page and < 5 paragraphs', {
+    paragraphCount: paragraphs.length,
+    url: window.location.href
+  }).catch(console.error);
+  
   return false;
 }
 
@@ -109,13 +135,44 @@ function shouldAnalyzePage(): boolean {
  * Send data to the background script
  */
 function sendToBackground(pageData: PageMetadata) {
-  let productData = null;
+  let productData: ReturnType<typeof scrapeProduct> = null;
   try {
     if (isProductPage()) {
       productData = scrapeProduct();
+      
+      // Log extraction success/failure
+      if (productData) {
+        const extractedFields = Object.keys(productData).filter(key => {
+          const val = productData ? (productData as any)[key] : null;
+          return val !== null && val !== undefined && val !== '' && 
+                 !(Array.isArray(val) && val.length === 0);
+        });
+        
+        logExtraction(
+          productData.detectedPlatform || 'unknown',
+          true,
+          {
+            hasTitle: !!productData.title,
+            hasPrice: !!productData.price?.value,
+            hasBullets: (productData.bullets?.length || 0) > 0,
+            hasDescription: !!productData.descriptionText,
+            hasImages: (productData.images?.length || 0) > 0
+          },
+          extractedFields
+        ).catch(console.error);
+      } else {
+        logExtractionFailure('unknown', 'scrapeProduct returned null', {
+          url: window.location.href,
+          isProductPage: true
+        }).catch(console.error);
+      }
     }
   } catch (e) {
     console.warn('Product scrape failed (non-fatal):', e);
+    logExtractionFailure('unknown', `scrapeProduct threw error: ${(e as Error).message}`, {
+      url: window.location.href,
+      error: (e as Error).stack
+    }).catch(console.error);
   }
   chrome.runtime.sendMessage({
     action: 'analyzePage',
