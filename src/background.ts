@@ -11,6 +11,7 @@ import { getDemandScore, Marketplace } from './utils/signals';
 // Holds the most recent product optimization result so popup or other parts can request it later.
 let latestProductOptimization: ProductOptimizationResult | null = null;
 let lastProductData: ProductData | null = null; // cache last scraped product for refresh
+let lastAnalyzedTabId: number | null = null;
 let lastAnalyzeAt = 0;
 const ANALYZE_DEBOUNCE_MS = 4000; // avoid spam & accidental double clicks
 
@@ -96,6 +97,36 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ success: true, remaining: st.remaining });
       })();
       return true;
+    case 'collectCompetitors':
+      (async () => {
+        const tabId = typeof lastAnalyzedTabId === 'number' ? lastAnalyzedTabId : sender.tab?.id;
+        if (typeof tabId !== 'number') {
+          sendResponse({ success: false, error: 'No active analyzed tab' });
+          return;
+        }
+        const limit = typeof message.limit === 'number' ? message.limit : 6;
+        const payload = {
+          action: 'scrapeCompetitors',
+          limit,
+          excludeSku: message.excludeSku || lastProductData?.sku || null
+        };
+        try {
+          chrome.tabs.sendMessage(tabId, payload, (response) => {
+            if (chrome.runtime.lastError) {
+              sendResponse({ success: false, error: chrome.runtime.lastError.message });
+              return;
+            }
+            if (!response || response.success !== true || !Array.isArray(response.competitors)) {
+              sendResponse({ success: false, error: response?.error || 'Competitor scrape unavailable' });
+              return;
+            }
+            sendResponse({ success: true, competitors: response.competitors });
+          });
+        } catch (e:any) {
+          sendResponse({ success: false, error: e?.message || 'Failed to collect competitors' });
+        }
+      })();
+      return true;
     case 'validateByok':
       (async () => {
         // Minimal stub: trust client for now; real validation can attempt a tiny model ping via proxy later
@@ -117,6 +148,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           return true;
         }
         lastAnalyzeAt = now;
+        if (typeof sender.tab?.id === 'number') {
+          lastAnalyzedTabId = sender.tab.id;
+        }
         handlePageAnalysis(message.data as PageMetadata, sendResponse, message.productData as ProductData | null | undefined);
       } else {
         sendResponse({ success: false, error: 'No page data provided for analysis.' });

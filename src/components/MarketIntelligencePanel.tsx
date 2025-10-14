@@ -47,6 +47,44 @@ const WarningIcon = () => (
   </svg>
 );
 
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: '$',
+  GBP: '£',
+  EUR: '€',
+  JPY: '¥',
+  CAD: 'CA$',
+  AUD: 'A$',
+  INR: '₹'
+};
+
+function normalizeCurrencyCode(value?: string | null): string {
+  if (!value) return 'USD';
+  const trimmed = value.trim();
+  if (!trimmed) return 'USD';
+  const symbolMap: Record<string, string> = { '$': 'USD', '£': 'GBP', '€': 'EUR', '¥': 'JPY' };
+  if (trimmed.length === 1 && symbolMap[trimmed]) return symbolMap[trimmed];
+  if (trimmed.length === 3) return trimmed.toUpperCase();
+  return symbolMap[trimmed] || 'USD';
+}
+
+function formatPriceValue(price: number, currency?: string | null): string {
+  if (!Number.isFinite(price) || price <= 0) return 'N/A';
+  const code = normalizeCurrencyCode(currency);
+  try {
+    return new Intl.NumberFormat(undefined, { style: 'currency', currency: code }).format(price);
+  } catch {
+    const symbol = CURRENCY_SYMBOLS[code] || '$';
+    return `${symbol}${price.toFixed(2)}`;
+  }
+}
+
+function formatRatingValue(rating: number, reviews: number): string {
+  const hasRating = Number.isFinite(rating) && rating > 0;
+  const ratingSegment = hasRating ? `${rating.toFixed(1)} ★` : 'Rating N/A';
+  const hasReviews = Number.isFinite(reviews) && reviews > 0;
+  return hasReviews ? `${ratingSegment} (${Math.round(reviews).toLocaleString()} reviews)` : ratingSegment;
+}
+
 const RefreshButton = styled.button`
   background: linear-gradient(135deg, var(--c-accent, #2563eb), #3b82f6);
   color: #ffffff;
@@ -135,6 +173,16 @@ const CompetitorCard = styled.div`
   border: 1px solid rgba(59, 130, 246, 0.35);
   background: rgba(59, 130, 246, 0.08);
   padding: 0.85rem;
+`;
+
+const PricePositionHeadline = styled.div`
+  font-weight: 600;
+`;
+
+const PricePositionMeta = styled.div`
+  font-size: 0.8rem;
+  margin-top: 0.4rem;
+  color: var(--c-text-dim, #64748b);
 `;
 
 const CompetitorTitle = styled.div`
@@ -273,6 +321,12 @@ const MarketIntelligencePanel: React.FC<MarketIntelligencePanelProps> = ({ data,
     );
   }
 
+  const detectedCurrency = data.competitors.find((comp) => comp.currency)?.currency || null;
+  const positionLabel = data.pricePositioning.position.charAt(0).toUpperCase() + data.pricePositioning.position.slice(1);
+  const marketAverageLabel = formatPriceValue(data.pricePositioning.competitorAverage, detectedCurrency);
+  const recommendedMinLabel = formatPriceValue(data.pricePositioning.recommendedPriceRange.min, detectedCurrency);
+  const recommendedMaxLabel = formatPriceValue(data.pricePositioning.recommendedPriceRange.max, detectedCurrency);
+
   return (
     <Panel>
       <PanelHeader>
@@ -312,10 +366,10 @@ const MarketIntelligencePanel: React.FC<MarketIntelligencePanelProps> = ({ data,
       <Section>
         <SectionTitle>Price positioning</SectionTitle>
         <MetricCard>
-          <div style={{ fontWeight: 600 }}>Position: {data.pricePositioning.position.charAt(0).toUpperCase() + data.pricePositioning.position.slice(1)}</div>
-          <div style={{ fontSize: '0.8rem', marginTop: '0.4rem', color: 'var(--c-text-dim, #64748b)' }}>
-            Market average {`$${data.pricePositioning.competitorAverage.toFixed(2)}`} • Recommended {`$${data.pricePositioning.recommendedPriceRange.min.toFixed(2)} - $${data.pricePositioning.recommendedPriceRange.max.toFixed(2)}`}
-          </div>
+          <PricePositionHeadline>Position: {positionLabel}</PricePositionHeadline>
+          <PricePositionMeta>
+            Market average {marketAverageLabel} • Recommended {recommendedMinLabel} - {recommendedMaxLabel}
+          </PricePositionMeta>
         </MetricCard>
       </Section>
 
@@ -323,11 +377,11 @@ const MarketIntelligencePanel: React.FC<MarketIntelligencePanelProps> = ({ data,
         <SectionTitle>Top competitors</SectionTitle>
         <CompetitorList>
           {data.competitors.slice(0, 3).map((competitor: CompetitorData, index) => (
-            <CompetitorCard key={index}>
+            <CompetitorCard key={index} title={competitor.source ? `Source: ${competitor.source}` : undefined}>
               <CompetitorTitle>{competitor.title}</CompetitorTitle>
               <CompetitorDetails>
-                <span>${competitor.price.toFixed(2)}</span>
-                <span>Rating {competitor.rating.toFixed(1)} ({competitor.reviewCount.toLocaleString()} reviews)</span>
+                <span>{formatPriceValue(competitor.price, competitor.currency || detectedCurrency)}</span>
+                <span>{formatRatingValue(competitor.rating, competitor.reviewCount)}</span>
               </CompetitorDetails>
             </CompetitorCard>
           ))}

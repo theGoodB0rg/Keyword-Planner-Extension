@@ -4,6 +4,7 @@
  */
 
 export interface StructuredError {
+  code: ErrorCode;
   title: string;
   message: string;
   details?: string;
@@ -33,7 +34,7 @@ export type ErrorCode =
   | 'PERMISSION_DENIED'
   | 'UNKNOWN_ERROR';
 
-const ERROR_CATALOG: Record<ErrorCode, Omit<StructuredError, 'details'>> = {
+const ERROR_CATALOG: Record<ErrorCode, Omit<StructuredError, 'details' | 'code'>> = {
   NO_ACTIVE_TAB: {
     title: 'No Active Tab',
     message: 'Could not detect an active browser tab. Please make sure you have a tab open and try again.',
@@ -174,6 +175,7 @@ export function createStructuredError(
 ): StructuredError {
   const template = ERROR_CATALOG[code];
   return {
+    code,
     ...template,
     details
   };

@@ -5,6 +5,7 @@
 
 import { ProductData } from '../types/product';
 import { KeywordData } from './types';
+import { STOPWORDS } from './stopwords';
 
 export interface CompetitorData {
   url: string;
@@ -15,6 +16,12 @@ export interface CompetitorData {
   keywords: string[];
   bulletPoints: string[];
   description: string;
+  currency?: string | null;
+  asin?: string | null;
+  image?: string | null;
+  source?: string;
+  lastUpdated?: number;
+  rawPrice?: string | null;
 }
 
 export interface TrendData {
@@ -47,10 +54,16 @@ export interface MarketIntelligenceResult {
   };
 }
 
+const MARKET_PROXY_BASE = (typeof process !== 'undefined' && process.env && process.env.NODE_ENV !== 'production')
+  ? 'http://localhost:8787'
+  : 'https://api.yourdomain.com';
+const TRENDS_ENDPOINT = `${MARKET_PROXY_BASE}/proxy/trends`;
+const TRENDS_TIMEOUT = 10000;
+
 export class MarketIntelligenceEngine {
   private static instance: MarketIntelligenceEngine;
-  private competitorCache = new Map<string, CompetitorData[]>();
-  private trendCache = new Map<string, TrendData>();
+  private competitorCache = new Map<string, { data: CompetitorData[]; ts: number }>();
+  private trendCache = new Map<string, { data: TrendData; ts: number }>();
   private cacheExpiry = 1000 * 60 * 30; // 30 minutes
 
   static getInstance(): MarketIntelligenceEngine {
@@ -65,12 +78,10 @@ export class MarketIntelligenceEngine {
    */
   async analyzeMarket(product: ProductData, keywords: string[]): Promise<MarketIntelligenceResult> {
     try {
-      const [competitors, trends, pricePositioning, keywordGaps] = await Promise.all([
-        this.getCompetitorAnalysis(product, keywords),
-        this.getTrendAnalysis(keywords),
-        this.analyzePricePositioning(product),
-        this.analyzeKeywordGaps(product, keywords)
-      ]);
+      const competitors = await this.getCompetitorAnalysis(product, keywords);
+      const trends = await this.getTrendAnalysis(keywords);
+      const pricePositioning = this.analyzePricePositioning(product, competitors);
+      const keywordGaps = await this.analyzeKeywordGaps(product, keywords, competitors);
 
       const marketInsights = this.generateMarketInsights(competitors, trends, pricePositioning);
 
@@ -91,37 +102,56 @@ export class MarketIntelligenceEngine {
    * Get competitor analysis using web scraping and search APIs
    */
   private async getCompetitorAnalysis(product: ProductData, keywords: string[]): Promise<CompetitorData[]> {
-    const cacheKey = `${product.title}_${keywords.join(',')}_competitors`;
-    
-    if (this.competitorCache.has(cacheKey)) {
-      const cached = this.competitorCache.get(cacheKey);
-      if (cached && cached.length > 0) {
-        const timestamp = (cached[0] as any)._timestamp;
-        if (timestamp && Date.now() - timestamp < this.cacheExpiry) {
-          return cached;
-        }
-      }
+    const cacheKey = `${product.url}|${product.sku || ''}|${keywords.slice(0, 5).join(',')}`;
+    const cached = this.competitorCache.get(cacheKey);
+    if (cached && Date.now() - cached.ts < this.cacheExpiry) {
+      return cached.data;
     }
 
     try {
-      // ⚠️ WARNING: Using simulated data - real API integration needed
-      // In production, this would use SerpApi, Amazon API, or other scraping services
-      // See COMPREHENSIVE_FIX_PLAN.md for API integration options
-      const competitors = await this.simulateCompetitorScraping(product, keywords);
-      
-      // Mark as simulated data
-      competitors.forEach(comp => {
-        (comp as any)._timestamp = Date.now();
+      const scraped = await this.fetchCompetitorsFromExtension(product);
+      if (scraped && scraped.length > 0) {
+        const normalized = scraped
+          .map((raw: unknown) => this.normalizeCompetitor(raw, product))
+          .filter((item: CompetitorData | null): item is CompetitorData => !!item && typeof item.url === 'string');
+        if (normalized.length > 0) {
+          normalized.sort((a, b) => (b.reviewCount || 0) - (a.reviewCount || 0));
+          const timestamp = Date.now();
+          normalized.forEach((comp: CompetitorData) => {
+            comp.lastUpdated = timestamp;
+            (comp as any)._timestamp = timestamp;
+          });
+          this.competitorCache.set(cacheKey, { data: normalized, ts: timestamp });
+          return normalized;
+        }
+      }
+    } catch (error) {
+      console.warn('Competitor scrape failed:', error);
+    }
+
+    try {
+      const simulated = await this.simulateCompetitorScraping(product, keywords);
+      const timestamp = Date.now();
+      simulated.forEach(comp => {
+        comp.lastUpdated = timestamp;
+        comp.source = 'fallback.simulated';
+        (comp as any)._timestamp = timestamp;
         (comp as any)._simulated = true;
-        (comp as any)._warning = 'DEMO MODE: Simulated data for demonstration purposes';
       });
-      
-      this.competitorCache.set(cacheKey, competitors);
-      
-      return competitors;
+      this.competitorCache.set(cacheKey, { data: simulated, ts: timestamp });
+      return simulated;
     } catch (error) {
       console.warn('Competitor analysis failed, using fallback:', error);
-      return this.getFallbackCompetitors(product);
+      const fallback = this.getFallbackCompetitors(product);
+      const timestamp = Date.now();
+      fallback.forEach(comp => {
+        comp.lastUpdated = timestamp;
+        comp.source = 'fallback.static';
+        (comp as any)._timestamp = timestamp;
+        (comp as any)._simulated = true;
+      });
+      this.competitorCache.set(cacheKey, { data: fallback, ts: timestamp });
+      return fallback;
     }
   }
 
@@ -129,43 +159,80 @@ export class MarketIntelligenceEngine {
    * Analyze trending keywords and search volume changes
    */
   private async getTrendAnalysis(keywords: string[]): Promise<TrendData[]> {
-    const trends: TrendData[] = [];
+    const uniqueKeywords = Array.from(new Set(
+      keywords
+        .map(k => k.trim().toLowerCase())
+        .filter(k => k.length >= 3 && !STOPWORDS.has(k))
+    ));
 
-    for (const keyword of keywords.slice(0, 10)) { // Limit to prevent API overuse
-      try {
-        // In production, integrate with Google Trends API
-        const trendData = await this.simulateTrendAnalysis(keyword);
-        trends.push(trendData);
-      } catch (error) {
-        console.warn(`Trend analysis failed for ${keyword}:`, error);
-        trends.push(this.getFallbackTrendData(keyword));
+    const selected = uniqueKeywords.slice(0, 6);
+    const results: TrendData[] = [];
+
+    for (const keyword of selected) {
+      const cacheEntry = this.trendCache.get(keyword);
+      if (cacheEntry && Date.now() - cacheEntry.ts < this.cacheExpiry) {
+        results.push(cacheEntry.data);
+        continue;
       }
+
+      try {
+        const trend = await this.fetchTrendFromProxy(keyword);
+        if (trend) {
+          this.trendCache.set(keyword, { data: trend, ts: Date.now() });
+          results.push(trend);
+          continue;
+        }
+      } catch (error) {
+        console.warn(`Trend proxy failed for ${keyword}:`, error);
+      }
+
+      const fallback = await this.simulateTrendAnalysis(keyword);
+      this.trendCache.set(keyword, { data: fallback, ts: Date.now() });
+      results.push(fallback);
     }
 
-    return trends;
+    return results;
   }
 
   /**
    * Analyze price positioning relative to competitors
    */
-  private async analyzePricePositioning(product: ProductData): Promise<MarketIntelligenceResult['pricePositioning']> {
-    const productPrice = product.price?.value || 0;
-    
-    // Simulate competitor price analysis
-    const competitorPrices = this.simulateCompetitorPrices(product);
+  private analyzePricePositioning(product: ProductData, competitors: CompetitorData[]): MarketIntelligenceResult['pricePositioning'] {
+    const productPrice = product.price?.value ?? null;
+    const competitorPrices = competitors
+      .map(c => c.price)
+      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0);
+
+    if (!competitorPrices.length) {
+      const fallbackAverage = productPrice ?? 0;
+      return {
+        position: 'average',
+        competitorAverage: fallbackAverage,
+        recommendedPriceRange: {
+          min: fallbackAverage * 0.9,
+          max: fallbackAverage * 1.1
+        }
+      };
+    }
+
     const average = competitorPrices.reduce((sum, price) => sum + price, 0) / competitorPrices.length;
-    
-    let position: 'low' | 'average' | 'high';
-    if (productPrice < average * 0.8) position = 'low';
-    else if (productPrice > average * 1.2) position = 'high';
-    else position = 'average';
+    const variance = competitorPrices.reduce((total, price) => total + Math.pow(price - average, 2), 0) / competitorPrices.length;
+    const stdDeviation = Math.sqrt(variance);
+    const recommendedMin = Math.max(0, average - stdDeviation);
+    const recommendedMax = average + stdDeviation;
+
+    let position: 'low' | 'average' | 'high' = 'average';
+    if (typeof productPrice === 'number' && Number.isFinite(productPrice)) {
+      if (productPrice <= average * 0.9) position = 'low';
+      else if (productPrice >= average * 1.1) position = 'high';
+    }
 
     return {
       position,
       competitorAverage: average,
       recommendedPriceRange: {
-        min: average * 0.85,
-        max: average * 1.15
+        min: recommendedMin,
+        max: recommendedMax
       }
     };
   }
@@ -173,25 +240,44 @@ export class MarketIntelligenceEngine {
   /**
    * Identify keyword gaps and opportunities
    */
-  private async analyzeKeywordGaps(product: ProductData, currentKeywords: string[]): Promise<MarketIntelligenceResult['keywordGaps']> {
-    // Simulate competitor keyword analysis
-    const competitorKeywords = this.simulateCompetitorKeywords(product);
-    const currentSet = new Set(currentKeywords.map(k => k.toLowerCase()));
-    
-    const missingKeywords = competitorKeywords
-      .filter(k => !currentSet.has(k.toLowerCase()))
+  private async analyzeKeywordGaps(
+    product: ProductData,
+    currentKeywords: string[],
+    competitors: CompetitorData[]
+  ): Promise<MarketIntelligenceResult['keywordGaps']> {
+    const normalizedCurrent = new Set(
+      currentKeywords
+        .map(k => k.trim().toLowerCase())
+        .filter(k => k.length > 2)
+    );
+
+    const competitorKeywords = competitors.flatMap(comp => comp.keywords || []);
+    const normalizedCompetitor = Array.from(
+      new Set(
+        competitorKeywords
+          .map(k => k.trim().toLowerCase())
+          .filter(k => k.length > 2 && !STOPWORDS.has(k))
+      )
+    );
+
+    const missingKeywords = normalizedCompetitor
+      .filter(k => !normalizedCurrent.has(k))
+      .slice(0, 15);
+
+    const opportunitySeeds = [
+      `${product.title} review`,
+      `${product.title} comparison`,
+      `${product.brand || ''} ${product.title} alternatives`,
+      `${product.title} best price`,
+      `${product.title} vs competitors`
+    ].map(k => k.toLowerCase());
+
+    const opportunityKeywords = opportunitySeeds
+      .filter(k => !normalizedCurrent.has(k))
       .slice(0, 10);
 
-    const opportunityKeywords = [
-      `best ${product.title.toLowerCase()}`,
-      `${product.title.toLowerCase()} reviews`,
-      `affordable ${product.title.toLowerCase()}`,
-      `${product.title.toLowerCase()} deals`,
-      `${product.title.toLowerCase()} comparison`
-    ].filter(k => !currentSet.has(k));
-
-    const competitorAdvantages = competitorKeywords
-      .filter(k => currentSet.has(k.toLowerCase()))
+    const competitorAdvantages = normalizedCompetitor
+      .filter(k => normalizedCurrent.has(k))
       .slice(0, 5);
 
     return {
@@ -209,8 +295,11 @@ export class MarketIntelligenceEngine {
     trends: TrendData[],
     pricePositioning: MarketIntelligenceResult['pricePositioning']
   ): MarketIntelligenceResult['marketInsights'] {
-    const avgRating = competitors.reduce((sum, c) => sum + c.rating, 0) / competitors.length;
-    const totalReviews = competitors.reduce((sum, c) => sum + c.reviewCount, 0);
+    const competitorCount = competitors.length;
+    const avgRating = competitorCount > 0
+      ? competitors.reduce((sum, c) => sum + (c.rating || 0), 0) / competitorCount
+      : 0;
+    const totalReviews = competitors.reduce((sum, c) => sum + (c.reviewCount || 0), 0);
     
     const competitionLevel: 'low' | 'medium' | 'high' = 
       totalReviews > 10000 ? 'high' : 
@@ -245,6 +334,148 @@ export class MarketIntelligenceEngine {
     };
   }
 
+  private async fetchCompetitorsFromExtension(product: ProductData): Promise<any[] | null> {
+    if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) {
+      return null;
+    }
+
+    return new Promise((resolve) => {
+      try {
+        chrome.runtime.sendMessage(
+          { action: 'collectCompetitors', limit: 8, excludeSku: product.sku || null },
+          (response: any) => {
+            if (chrome.runtime.lastError) {
+              resolve(null);
+              return;
+            }
+            if (response?.success && Array.isArray(response.competitors)) {
+              resolve(response.competitors);
+            } else {
+              resolve(null);
+            }
+          }
+        );
+      } catch (error) {
+        console.warn('Unable to request competitor data from content script:', error);
+        resolve(null);
+      }
+    });
+  }
+
+  private normalizeCurrency(currency: unknown, fallback?: string | null): string | null {
+    if (!currency) return fallback || null;
+    const value = String(currency).trim();
+    if (!value) return fallback || null;
+    const symbolMap: Record<string, string> = {
+      '$': 'USD',
+      '£': 'GBP',
+      '€': 'EUR',
+      '¥': 'JPY'
+    };
+    if (value.length === 1 && symbolMap[value]) return symbolMap[value];
+    if (value.length === 3) return value.toUpperCase();
+    return fallback || null;
+  }
+
+  private buildCompetitorKeywords(title: string, subtitle?: string): string[] {
+    const text = `${title || ''} ${subtitle || ''}`.toLowerCase();
+    const tokens = text.split(/[^a-z0-9+]+/).filter(token => token.length >= 3 && !STOPWORDS.has(token));
+    const unique = Array.from(new Set(tokens));
+    return unique.slice(0, 15);
+  }
+
+  private normalizeCompetitor(raw: any, product: ProductData): CompetitorData | null {
+    if (!raw) return null;
+    const url = typeof raw.url === 'string' ? raw.url : '';
+    const title = typeof raw.title === 'string' ? raw.title.trim() : '';
+    if (!url || !title) return null;
+
+    const priceValue = typeof raw.price === 'number' && Number.isFinite(raw.price) ? raw.price : null;
+    const ratingValue = typeof raw.rating === 'number' && Number.isFinite(raw.rating) ? Math.max(0, Math.min(5, raw.rating)) : null;
+    const reviewValue = typeof raw.reviewCount === 'number' && Number.isFinite(raw.reviewCount) ? Math.max(0, raw.reviewCount) : null;
+    const subtitle = typeof raw.subtitle === 'string' ? raw.subtitle.trim() : '';
+    const bulletPoints = subtitle
+      ? subtitle.split(/•|\||,|·/).map((part: string) => part.trim()).filter((part: string) => !!part).slice(0, 5)
+      : [];
+    const currency = this.normalizeCurrency(raw.currency, product.price?.currency || null);
+    const keywords = this.buildCompetitorKeywords(title, subtitle);
+
+    return {
+      url,
+      title,
+      price: priceValue ?? 0,
+      rating: ratingValue ?? 0,
+      reviewCount: reviewValue ?? 0,
+      keywords,
+      bulletPoints,
+      description: subtitle || raw.rawPrice || '',
+      currency,
+      asin: typeof raw.asin === 'string' ? raw.asin : null,
+      image: typeof raw.image === 'string' ? raw.image : null,
+      source: typeof raw.source === 'string' ? raw.source : 'page.scrape',
+      lastUpdated: Date.now(),
+      rawPrice: typeof raw.rawPrice === 'string' ? raw.rawPrice : null
+    };
+  }
+
+  private classifySeasonality(values: number[]): TrendData['seasonalPattern'] {
+    const clean = values.filter(value => Number.isFinite(value));
+    if (clean.length < 6) return 'unknown';
+    const average = clean.reduce((sum, value) => sum + value, 0) / clean.length;
+    if (average === 0) return 'unknown';
+    const variance = clean.reduce((sum, value) => sum + Math.pow(value - average, 2), 0) / clean.length;
+    const std = Math.sqrt(variance);
+    const cv = std / average;
+    if (cv > 0.65) return 'high';
+    if (cv > 0.35) return 'medium';
+    return 'low';
+  }
+
+  private async fetchTrendFromProxy(keyword: string): Promise<TrendData | null> {
+    if (typeof fetch === 'undefined') return null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let controller: AbortController | undefined;
+    if (typeof AbortController !== 'undefined') {
+      controller = new AbortController();
+      timer = setTimeout(() => controller?.abort(), TRENDS_TIMEOUT);
+    }
+
+    try {
+      const response = await fetch(TRENDS_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keyword, timeframe: '12m' }),
+        signal: controller?.signal
+      });
+      if (!response.ok) {
+        return null;
+      }
+      const data = await response.json();
+      const points = Array.isArray(data?.points) ? data.points : [];
+      const values = points.map((pt: any) => Number(pt?.value) || 0);
+      const percentChange = Number(data?.percentChange ?? data?.summary?.percentChange ?? 0);
+      const volumeChange = Number(data?.summary?.change ?? (values.length >= 2 ? values[values.length - 1] - values[0] : 0));
+      const direction: TrendData['trendDirection'] = percentChange > 8 ? 'up' : percentChange < -8 ? 'down' : 'stable';
+      const rawConfidence = Number(data?.confidence);
+      const derivedConfidence = Number.isFinite(rawConfidence) ? rawConfidence : values.length / 52;
+      const boundedConfidence = Math.min(1, Math.max(0.35, Number.isFinite(derivedConfidence) ? derivedConfidence : 0.5));
+      const seasonalPattern = this.classifySeasonality(values);
+
+      return {
+        keyword,
+        trendDirection: direction,
+        trendPercentage: Number(percentChange.toFixed(2)),
+        searchVolumeChange: Number(volumeChange.toFixed(2)),
+        seasonalPattern,
+        confidence: Number(boundedConfidence.toFixed(2))
+      };
+    } catch {
+      return null;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
   // Simulation methods (replace with real API calls in production)
   
   private async simulateCompetitorScraping(product: ProductData, keywords: string[]): Promise<CompetitorData[]> {
@@ -255,10 +486,11 @@ export class MarketIntelligenceEngine {
     const competitors: CompetitorData[] = [];
     
     for (let i = 0; i < 5; i++) {
+      const price = Math.max(1, basePrice + (Math.random() - 0.5) * basePrice * 0.4);
       competitors.push({
         url: `https://competitor${i + 1}.example.com/product`,
         title: `${product.title} Alternative ${i + 1}`,
-        price: basePrice + (Math.random() - 0.5) * basePrice * 0.4,
+        price,
         rating: 3.5 + Math.random() * 1.5,
         reviewCount: Math.floor(Math.random() * 5000) + 100,
         keywords: keywords.slice(0, 3).concat([`competitor${i + 1}`, 'alternative']),
@@ -267,7 +499,13 @@ export class MarketIntelligenceEngine {
           `Benefit ${i + 1}`,
           `Quality aspect ${i + 1}`
         ],
-        description: `Competitor ${i + 1} product description...`
+        description: `Competitor ${i + 1} product description...`,
+        currency: product.price?.currency || 'USD',
+        asin: null,
+        image: null,
+        source: 'fallback.simulated',
+        lastUpdated: Date.now(),
+        rawPrice: null
       });
     }
     
@@ -312,8 +550,13 @@ export class MarketIntelligenceEngine {
   // Fallback methods for offline mode or API failures
 
   private getFallbackMarketData(product: ProductData, keywords: string[]): MarketIntelligenceResult {
+    const fallbackCompetitors = this.getFallbackCompetitors(product).map(comp => {
+      (comp as any)._simulated = true;
+      (comp as any)._timestamp = Date.now();
+      return comp;
+    });
     return {
-      competitors: this.getFallbackCompetitors(product),
+      competitors: fallbackCompetitors,
       trends: keywords.slice(0, 5).map(k => this.getFallbackTrendData(k)),
       pricePositioning: {
         position: 'average',
@@ -351,7 +594,13 @@ export class MarketIntelligenceEngine {
         reviewCount: 1250,
         keywords: ['alternative', 'similar', 'competitor'],
         bulletPoints: ['Feature 1', 'Feature 2', 'Feature 3'],
-        description: 'Competitor product description'
+        description: 'Competitor product description',
+        currency: product.price?.currency || 'USD',
+        asin: null,
+        image: null,
+        source: 'fallback.static',
+        lastUpdated: Date.now(),
+        rawPrice: null
       }
     ];
   }

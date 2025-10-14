@@ -9,10 +9,12 @@ import Header from './components/Header';
 // @ts-ignore
 import pkg from '../package.json';
 import KeywordTable from './components/KeywordTable';
+import ErrorDisplay from './components/ErrorDisplay';
 import { KeywordData } from './utils/types';
 import { isOfflineMode, toggleOfflineMode, loadKeywords as loadKeywordsFromStorage } from './utils/storage';
 import { ProductOptimizationResult, LongTailSuggestion, MetaSuggestion, RewrittenBullet, GapResult } from './types/product';
 import { AiTaskType } from './types/product';
+import { StructuredError, categorizeError, createStructuredError } from './utils/errorMessages';
 // Licensing UI (status + simple activation)
 
 const Container = styled.div`
@@ -330,7 +332,7 @@ const ChipContainer = styled.div`
 const App: React.FC = () => {
   const [keywords, setKeywords] = useState<KeywordData[]>([]);
   const [keywordsLoading, setKeywordsLoading] = useState<boolean>(true); 
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<StructuredError | null>(null);
   const [offlineMode, setOfflineMode] = useState<boolean>(false);
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false); 
   const [copyButtonText, setCopyButtonText] = useState("Copy Keywords");
@@ -366,13 +368,17 @@ const App: React.FC = () => {
         setKeywords(message.keywords || []);
         setError(null); 
         if (message.keywords && message.keywords.length === 0 && !isAnalyzing) { // Only show if not in midst of analysis
-            setError("Analysis complete, but no keywords were found for this page.");
+            setError(createStructuredError('NO_PRODUCT_DATA'));
         }
         setKeywordsLoading(false);
         setIsAnalyzing(false);
       }
       if (message.action === 'pageUnsupported') {
         setUnsupportedPage(message.url || '');
+        const detailParts: string[] = [];
+        if (message.reason) detailParts.push(`Reason: ${message.reason}`);
+        if (message.url) detailParts.push(`URL: ${message.url}`);
+        setError(createStructuredError('UNSUPPORTED_PAGE', detailParts.length ? detailParts.join(' | ') : undefined));
         setKeywordsLoading(false);
         setIsAnalyzing(false);
       }
@@ -439,7 +445,7 @@ const App: React.FC = () => {
         setHistoryLoading(false);
       });
     } catch (err) {
-      setError('Failed to initialize.'); setKeywordsLoading(false); setOptimizationLoading(false);
+      setError(categorizeError('Failed to initialize.')); setKeywordsLoading(false); setOptimizationLoading(false);
     } finally {
         setKeywordsLoading(false); // Ensure loading is false after initial setup
     }
@@ -452,7 +458,7 @@ const App: React.FC = () => {
       const loadedKeywords = await loadKeywordsFromStorage();
       setKeywords(loadedKeywords);
     } catch (err) {
-      setError('Failed to load keywords.'); setKeywords([]); 
+      setError(categorizeError('Failed to load keywords.')); setKeywords([]); 
     } finally {
       if (showLoadingIndicator || keywordsLoading) setKeywordsLoading(false); 
     }
@@ -465,26 +471,29 @@ const App: React.FC = () => {
     try {
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         if (chrome.runtime.lastError) {
-          setError(`Error accessing tabs: ${chrome.runtime.lastError.message}.`);
+          setError(categorizeError(`Error accessing tabs: ${chrome.runtime.lastError.message}.`));
           setIsAnalyzing(false); setKeywordsLoading(false); setOptimizationLoading(false); return;
         }
         const tab = tabs[0];
         if (!tab?.id) {
-          setError('No active tab found.'); setIsAnalyzing(false); setKeywordsLoading(false); setOptimizationLoading(false); return;
+          setError(createStructuredError('NO_ACTIVE_TAB'));
+          setIsAnalyzing(false); setKeywordsLoading(false); setOptimizationLoading(false); return;
         }
         const url = tab.url || '';
         const restrictedProtocols = ['chrome:', 'chrome-extension:', 'edge:', 'about:', 'file:'];
         if (restrictedProtocols.some(protocol => url.startsWith(protocol)) || !url.startsWith('http')) {
-          setError('Cannot analyze this page type.'); setIsAnalyzing(false); setKeywordsLoading(false); setOptimizationLoading(false); return;
+          setError(createStructuredError('UNSUPPORTED_PAGE', `URL: ${url}`));
+          setIsAnalyzing(false); setKeywordsLoading(false); setOptimizationLoading(false); return;
         }
         chrome.tabs.sendMessage(tab.id, { action: 'manualAnalyze' }, (responseFromContentScript) => {
             const runtimeError = chrome.runtime.lastError;
             if (runtimeError) {
-              setError(`Error initiating analysis: ${runtimeError.message}`);
+              setError(categorizeError(`Error initiating analysis: ${runtimeError.message}`));
               setIsAnalyzing(false); setKeywordsLoading(false); setOptimizationLoading(false); return;
             }
             if (!responseFromContentScript?.success) {
-              setError(responseFromContentScript?.error || 'Content script failed to initiate analysis.');
+              const message = responseFromContentScript?.error || 'Content script failed to initiate analysis.';
+              setError(categorizeError(message));
               setIsAnalyzing(false); setKeywordsLoading(false); setOptimizationLoading(false);
             }
             // Now wait for 'keywordsUpdated' from background via runtime.onMessage listener
@@ -492,7 +501,7 @@ const App: React.FC = () => {
         );
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An unexpected error occurred.');
+      setError(categorizeError(err instanceof Error ? err.message : 'An unexpected error occurred.'));
       setIsAnalyzing(false); setKeywordsLoading(false); setOptimizationLoading(false);
     }
   };
@@ -504,7 +513,7 @@ const App: React.FC = () => {
       setOfflineMode(newValue);
       await loadKeywords(); 
     } catch (err) {
-      setError('Failed to toggle offline mode.'); setKeywordsLoading(false); setOptimizationLoading(false);
+      setError(createStructuredError('STORAGE_ERROR', 'Failed to toggle offline mode.'));
       const currentMode = await isOfflineMode(); setOfflineMode(currentMode);
     }
   };
@@ -534,7 +543,7 @@ const App: React.FC = () => {
       .catch(err => {
         console.error('Popup: Failed to copy keywords to clipboard:', err);
         setCopyButtonText("Copy Failed");
-        setError("Failed to copy keywords. Check console for details.");
+        setError(categorizeError('Failed to copy keywords. Check console for details.'));
         setTimeout(() => {
             setCopyButtonText("Copy Keywords");
             setError(null); // Clear error after a bit
@@ -671,10 +680,17 @@ const App: React.FC = () => {
         onToggleOfflineMode={handleToggleOfflineMode} 
       />
       <Content>
-        {unsupportedPage && (
+        {unsupportedPage && !error && (
           <Notice>
             This page type isn’t supported for analysis yet.
           </Notice>
+        )}
+        {error && (
+          <ErrorDisplay
+            error={error}
+            onRetry={error.retryable ? handleAnalyzeCurrentPage : undefined}
+            onDismiss={() => setError(null)}
+          />
         )}
         <ButtonContainer>
           <ActionButton onClick={handleAnalyzeCurrentPage} disabled={isAnalyzing || keywordsLoading}>
@@ -709,7 +725,7 @@ const App: React.FC = () => {
           <TinyButton onClick={toggleHistory} disabled={historyLoading}>{showHistory ? 'Hide History' : 'Show History'}{historyLoading ? '…' : ''}</TinyButton>
           {showHistory && history.length > 0 && <TinyButton disabled>{history.length} snapshots</TinyButton>}
         </InlineActions>
-        <KeywordTable keywords={keywords} loading={keywordsLoading} error={error} />
+  <KeywordTable keywords={keywords} loading={keywordsLoading} error={error ? error.message : null} />
         {!optimization && optimizationLoading && (
           <OptimizationPanel>
             <PanelHeading>Product Optimization</PanelHeading>

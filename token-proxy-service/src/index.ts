@@ -7,6 +7,7 @@ import { createSigner, getJWKS, getPublicJwk, getKeyId, ensureKeypair } from './
 import { issueTokenHandler } from './routes/issueToken';
 import { aiProxyHandler, aiProxyInfoHandler } from './routes/proxyAi';
 import { analyzeHandler, analyzeInfoHandler } from './routes/analyze';
+import { trendsProxyHandler, trendsProxyInfoHandler } from './routes/proxyTrends';
 import { rateLimit } from './rateLimit';
 
 const app = express();
@@ -35,6 +36,7 @@ app.get('/', (_req, res) => res.json({
     analyze: 'POST /analyze',
     analyze_info: 'GET /analyze',
     ai_proxy: 'POST /proxy/ai',
+    trends_proxy: 'POST /proxy/trends',
     jwks: 'GET /.well-known/jwks.json',
     issue_token: 'POST /issue-token'
   }
@@ -56,6 +58,8 @@ app.post('/issue-token', rateLimit, issueTokenHandler);
 // AI Proxy
 app.post('/proxy/ai', rateLimit, aiProxyHandler);
 app.get('/proxy/ai', aiProxyInfoHandler);
+app.post('/proxy/trends', rateLimit, trendsProxyHandler);
+app.get('/proxy/trends', trendsProxyInfoHandler);
 
 // Analyze page content into keyword data
 app.post('/analyze', rateLimit, analyzeHandler);

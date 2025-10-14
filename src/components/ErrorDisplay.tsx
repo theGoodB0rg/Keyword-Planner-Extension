@@ -190,7 +190,7 @@ export const ErrorDisplay: React.FC<ErrorDisplayProps> = ({
         break;
       case 'report':
         // Copy error details to clipboard for reporting
-        const reportData = `Error Report:\nTitle: ${error.title}\nMessage: ${error.message}\nDetails: ${error.details || 'None'}`;
+        const reportData = `Error Report:\nCode: ${error.code}\nTitle: ${error.title}\nMessage: ${error.message}\nDetails: ${error.details || 'None'}`;
         navigator.clipboard.writeText(reportData).then(() => {
           alert('Error details copied to clipboard. Please email them to support.');
         });
@@ -223,7 +223,7 @@ export const ErrorDisplay: React.FC<ErrorDisplayProps> = ({
           
           {showSuggestions && error.actionable && (
             <SuggestionsList>
-              {getErrorSuggestions(error.title.toUpperCase().replace(/\s+/g, '_') as any).map((suggestion, idx) => (
+              {getErrorSuggestions(error.code ?? 'UNKNOWN_ERROR').map((suggestion, idx) => (
                 <SuggestionItem key={idx}>{suggestion}</SuggestionItem>
               ))}
             </SuggestionsList>

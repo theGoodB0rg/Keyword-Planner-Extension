@@ -500,6 +500,11 @@ const App: React.FC = () => {
       }
       if (message.action === 'pageUnsupported') {
         setUnsupportedPage(message.url || '');
+  const detailParts: string[] = [];
+        if (message.reason) detailParts.push(`Reason: ${message.reason}`);
+        if (message.url) detailParts.push(`URL: ${message.url}`);
+        const detail = detailParts.length ? detailParts.join(' | ') : undefined;
+        setError(createStructuredError('UNSUPPORTED_PAGE', detail));
         setQuotaStatus(null);
         setKeywordsLoading(false);
         setOptimizationLoading(false);
@@ -858,7 +863,7 @@ const App: React.FC = () => {
         onToggleOfflineMode={handleToggleOfflineMode} 
       />
       <Content>
-        {unsupportedPage && (
+        {unsupportedPage && !error && (
           <Notice>
             This page type isn’t supported for analysis yet.
           </Notice>
@@ -899,7 +904,7 @@ const App: React.FC = () => {
         {error && (
           <ErrorDisplay 
             error={error} 
-            onRetry={handleAnalyzeCurrentPage}
+            onRetry={error.retryable ? handleAnalyzeCurrentPage : undefined}
             onDismiss={() => setError(null)}
             onCustomAction={(actionType) => {
               if (actionType === 'offline') {
