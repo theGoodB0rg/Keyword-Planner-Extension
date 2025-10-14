@@ -1,5 +1,6 @@
 /**
  * Content script - Runs in the context of web pages
+ * Phase 2: Now supports SPA navigation and re-initialization
  */
 
 import { extractPageContent, isProductPage } from './utils/scraper';
@@ -13,29 +14,44 @@ import {
 } from './utils/telemetry';
 import { shouldAnalyzePageSemantic } from './content/scraper/semanticDetection';
 
-// Ensure we only initialize once per page
-let initialized = false;
+/**
+ * Phase 2: SPA Navigation Support
+ * Track state instead of blocking re-runs
+ */
+let lastAnalyzedUrl = '';
+let analysisInProgress = false;
+let debounceTimer: number | null = null;
+let navigationObserver: MutationObserver | null = null;
+
+/**
+ * Debounce function to prevent excessive re-analysis
+ */
+function debounce(func: Function, delay: number) {
+  return (...args: any[]) => {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = window.setTimeout(() => func(...args), delay);
+  };
+}
 
 // Wait for the page to be fully loaded
 document.addEventListener('DOMContentLoaded', () => {
   // Add a small delay to ensure all content has loaded
   setTimeout(() => {
-    if (!initialized) initialize();
+    initialize();
   }, 1000);
 });
 
 // Initialize if document is already loaded
 if (document.readyState === 'complete') {
-  if (!initialized) initialize();
+  initialize();
 }
 
 /**
  * Initialize the content script
+ * Phase 2: Now supports re-initialization for SPA navigation
  */
 function initialize() {
   try {
-    if (initialized) return;
-    initialized = true;
     console.log('AI Keyword Planner: Content script initialized');
 
     // Log initial page load
@@ -44,6 +60,161 @@ function initialize() {
       pathname: window.location.pathname,
       hostname: window.location.hostname
     }).catch(console.error);
+
+    // Set up SPA navigation listeners
+    setupSPAListeners();
+
+    // Analyze current page
+    analyzePage();
+  } catch (error) {
+    console.error('AI Keyword Planner: Error in content script initialization', error);
+  }
+}
+
+/**
+ * Phase 2: Set up listeners for SPA navigation
+ */
+function setupSPAListeners() {
+  // Listen for browser history changes (pushState, replaceState)
+  const originalPushState = history.pushState;
+  const originalReplaceState = history.replaceState;
+
+  history.pushState = function(...args) {
+    originalPushState.apply(history, args);
+    logNavigation('pushstate', {
+      url: window.location.href,
+      pathname: window.location.pathname
+    }).catch(console.error);
+    handleSPANavigation();
+  };
+
+  history.replaceState = function(...args) {
+    originalReplaceState.apply(history, args);
+    logNavigation('pushstate', {
+      url: window.location.href,
+      pathname: window.location.pathname,
+      type: 'replace'
+    }).catch(console.error);
+    handleSPANavigation();
+  };
+
+  // Listen for popstate (back/forward button)
+  window.addEventListener('popstate', () => {
+    logNavigation('popstate', {
+      url: window.location.href,
+      pathname: window.location.pathname
+    }).catch(console.error);
+    handleSPANavigation();
+  });
+
+  // Set up MutationObserver for DOM changes
+  setupMutationObserver();
+
+  console.log('AI Keyword Planner: SPA navigation listeners active');
+}
+
+/**
+ * Phase 2: Set up MutationObserver to detect significant DOM changes
+ */
+function setupMutationObserver() {
+  // Disconnect existing observer if any
+  if (navigationObserver) {
+    navigationObserver.disconnect();
+  }
+
+  navigationObserver = new MutationObserver(
+    debounce((mutations: MutationRecord[]) => {
+      // Check if mutations are significant (not just minor UI updates)
+      const significantChange = mutations.some(mutation => {
+        // Look for changes in main content areas
+        const target = mutation.target as HTMLElement;
+        if (!target.closest) return false;
+
+        // Check if change is in main product/content area
+        const isMainContent = 
+          target.closest('main') ||
+          target.closest('[role="main"]') ||
+          target.closest('#content') ||
+          target.closest('.product') ||
+          target.closest('[data-product]');
+
+        // Check for added product-related elements
+        if (mutation.addedNodes.length > 0) {
+          return Array.from(mutation.addedNodes).some(node => {
+            if (node.nodeType !== Node.ELEMENT_NODE) return false;
+            const el = node as HTMLElement;
+            return el.querySelector && (
+              el.querySelector('[itemtype*="Product"]') ||
+              el.querySelector('[data-product]') ||
+              el.querySelector('.product') ||
+              el.id?.includes('product')
+            );
+          });
+        }
+
+        return isMainContent && mutation.addedNodes.length > 3;
+      });
+
+      if (significantChange) {
+        logNavigation('mutation', {
+          url: window.location.href,
+          mutationCount: mutations.length
+        }).catch(console.error);
+        handleSPANavigation();
+      }
+    }, 500) // 500ms debounce
+  );
+
+  // Observe the entire document for changes
+  navigationObserver.observe(document.body, {
+    childList: true,
+    subtree: true,
+    attributes: false // Don't track attribute changes to reduce noise
+  });
+
+  console.log('AI Keyword Planner: MutationObserver active');
+}
+
+/**
+ * Phase 2: Handle SPA navigation by re-analyzing the page
+ */
+function handleSPANavigation() {
+  const currentUrl = window.location.href;
+
+  // Check if URL actually changed
+  if (currentUrl === lastAnalyzedUrl) {
+    return;
+  }
+
+  console.log('AI Keyword Planner: SPA navigation detected', {
+    from: lastAnalyzedUrl,
+    to: currentUrl
+  });
+
+  // Re-analyze the new page
+  analyzePage();
+}
+
+/**
+ * Phase 2: Analyze the current page (can be called multiple times)
+ */
+function analyzePage() {
+  const currentUrl = window.location.href;
+
+  // Skip if already analyzing
+  if (analysisInProgress) {
+    console.log('AI Keyword Planner: Analysis already in progress, skipping');
+    return;
+  }
+
+  // Skip if already analyzed this exact URL
+  if (currentUrl === lastAnalyzedUrl) {
+    console.log('AI Keyword Planner: URL already analyzed, skipping');
+    return;
+  }
+
+  try {
+    analysisInProgress = true;
 
     // Check if this page is a product or content-rich page worth analyzing
     if (shouldAnalyzePage()) {
@@ -76,8 +247,16 @@ function initialize() {
         setTimeout(() => banner.remove(), 5000);
       } catch {}
     }
+
+    // Mark this URL as analyzed
+    lastAnalyzedUrl = currentUrl;
+    console.log('AI Keyword Planner: Page analysis complete for', currentUrl);
+
   } catch (error) {
-    console.error('AI Keyword Planner: Error in content script', error);
+    console.error('AI Keyword Planner: Error analyzing page', error);
+  } finally {
+    // Always reset the in-progress flag
+    analysisInProgress = false;
   }
 }
 
@@ -302,17 +481,27 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "manualAnalyze") {
     console.log('AI Keyword Planner: Manual analysis triggered from popup.');
     try {
-      const pageData = extractPageContent();
-      sendToBackground(pageData); // This will send to background for analysis
+      // Phase 2: Force re-analysis by clearing last analyzed URL
+      const previousUrl = lastAnalyzedUrl;
+      lastAnalyzedUrl = '';
+      
+      // Re-analyze the current page
+      analyzePage();
+      
       sendResponse({ success: true, message: "Manual analysis initiated." });
 
       // Optional: Provide immediate feedback on the button if it exists
-      const button = document.querySelector('#ai-keyword-planner-button'); // Assume button has an ID
+      const button = document.querySelector('#ai-keyword-planner-button');
       if (button && button instanceof HTMLButtonElement) {
         button.textContent = 'Analyzing...';
         button.disabled = true;
-        // The button state should ideally be reset based on a response from the background
-        // or after keywords are updated in the popup, rather than a fixed timeout here.
+        // Reset after a delay
+        setTimeout(() => {
+          if (button) {
+            button.textContent = 'Analyze Keywords';
+            button.disabled = false;
+          }
+        }, 3000);
       }
     } catch (error) {
       console.error('AI Keyword Planner: Error during manual analysis:', error);
