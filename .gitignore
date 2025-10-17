@@ -40,7 +40,12 @@ errors.txt
 
 # Icon generation temp
 temp-icons/
-extension_creation_plan.md
+
+# Markdown documentation files (except README)
+*.md
+!README.md
+!token-proxy-service/README.md
+!tests/fixtures/README.md
 
 # TypeScript
 *.tsbuildinfo
